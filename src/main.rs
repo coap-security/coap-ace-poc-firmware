@@ -95,7 +95,7 @@ async fn bluetooth_task(sd: &'static Softdevice, server: Server) {
         // AD structure 1: Flags
         0x02, 0x01, raw::BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE as u8,
         // AD structure 2: Appearance: generic thermometer
-        0x03, 0x1a, 0x03, 0x40,
+        0x03, 0x19, 0x00, 0x03,
         // AD structure 3: Shortened local name
         0x09, 0x08, b'C', b'o', b'A', b'P', b'-', b'A', b'C', b'E',
     ];
