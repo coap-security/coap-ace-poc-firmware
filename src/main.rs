@@ -24,12 +24,12 @@
 //!   Other debuggers will do as well, but to display debug output, some tool that supports `defmt`
 //!   is needed; `probe-run` does that.
 //!
-//!   <!-- TBD: probably one of them will do -->
+//!   <!-- TBD: probably one of the two probe- might do -->
 //!
 //! To build and install the firmware:
 //!
 //! * Flash the softdevice. This is only necessary if that version was not installed previously
-//!   already.
+//!   already (eg. if the device was just erased).
 //!
 //!   ```shell
 //!   $ probe-rs-cli download --chip nrf52832_xxAA --format hex /tmp/s132_nrf52_7.3.0/s132_nrf52_7.3.0_softdevice.hex
@@ -37,8 +37,8 @@
 //!
 //!   * If you encounter errors in the style of "Error: AP ApAddress { dp: Default, ap: 0 } is not
 //!     a memory AP", the target chip may be in a locked state; this depends on the previously
-//!     flashed firmware. Run `nrf-recover` to unlock it; this erases all data on the target
-//!     device.
+//!     flashed firmware and/or the debugger. Run `nrf-recover` to unlock it; this erases all data
+//!     on the target device.
 //!
 //! * Run
 //!
@@ -92,17 +92,20 @@ async fn bluetooth_task(sd: &'static Softdevice, server: Server) {
     #[rustfmt::skip]
     let adv_data = &[
         // length, type, value; types see Generic Access Profile
-        // AD structure 1: Flags
+        //
+        // We'd only send the minimal data here; once we get someone's attention they'll scan us
+        // for the more information below.
+
+        // AD structure 1: Flags (they can't be in the scan data, which is enforced by the
+        // softdevice; and without these, blueman-manager won't show the device)
         0x02, 0x01, raw::BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE as u8,
         // AD structure 2: Appearance: generic thermometer
         0x03, 0x19, 0x00, 0x03,
-        // AD structure 3: Shortened local name
-        0x09, 0x08, b'C', b'o', b'A', b'P', b'-', b'A', b'C', b'E',
     ];
     #[rustfmt::skip]
     let scan_data = &[
-        // Sending appearance all the time
-        0x03, 0x1a, 0x03, 0x40,
+        // AD structure 3: Shortened local name
+        0x09, 0x08, b'C', b'o', b'A', b'P', b'-', b'A', b'C', b'E',
     ];
 
     loop {
