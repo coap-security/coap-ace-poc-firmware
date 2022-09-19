@@ -11,6 +11,10 @@ default = [ "hardware-nrf52dk" ]
 # Not parametrizing into dependencies yet
 hardware-nrf52dk = []
 
+[profile.release]
+# to get better output from defmt / probe-run
+debug = 2
+
 [dependencies]
 # Providing general entry
 cortex-m-rt = "0.7.0"

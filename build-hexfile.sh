@@ -5,6 +5,9 @@ set -e
 cargo +nightly build --release
 OURTMP=$(mktemp --directory)
 objcopy -O ihex target/thumbv7em-none-eabihf/release/coap-ace-poc-firmware "$OURTMP"/firmware.hex
+# Note that we can distribute the result pretty easily -- it's a binary that is
+# a software update for a Nordic device, and as such doesn't even need the
+# license to be shipped with it.
 wget https://www.nordicsemi.com/-/media/Software-and-other-downloads/SoftDevices/S132/s132_nrf52_7.3.0.zip -O "$OURTMP"/s132_nrf52_7.3.0.zip
 unzip "$OURTMP"/s132_nrf52_7.3.0.zip s132_nrf52_7.3.0_softdevice.hex -d "$OURTMP"
 # Observations regarding what needs to be in here:
