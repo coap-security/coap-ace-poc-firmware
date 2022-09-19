@@ -36,6 +36,8 @@ Quick start: Running the proof-of-concept demo
 * Obtain an [nRF52-DK] device; connect it via USB to a computer and move its power switch to the "on" position.
 * Download the latest build of this firmware from TBD as `TBD.hex`.
 * Copy the file `TBD.hex` onto the "JLINK" USB drive that has appeared on your computer.
+* Restart the board by moving the board's power switch to "off" and back to "on".
+  <!-- Merely pressing the BOOT/RESET button is insufficient. -->
 * Direct a Bluetooth capable's cellphone web browser (Chrome or Chromium) to TBD. Follow the login instructions, picking either the role of the "junior" or the "senior".
 
   You may also install the mobile application through the browser's "Install app" button.
