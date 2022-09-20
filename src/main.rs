@@ -63,10 +63,10 @@ use embassy_nrf as _;
 use panic_probe as _;
 
 use cortex_m_rt::entry;
-use defmt::{info, unwrap};
+use defmt::{info, error, unwrap};
 use embassy_executor::executor::Executor;
 use embassy_util::Forever;
-use nrf_softdevice::ble::peripheral;
+use nrf_softdevice::ble::{gatt_server, peripheral};
 use nrf_softdevice::{raw, Softdevice};
 
 static EXECUTOR: Forever<Executor> = Forever::new();
@@ -80,13 +80,25 @@ async fn softdevice_task(sd: &'static Softdevice) {
     sd.run().await;
 }
 
-/// We don't have any GATT attributes yet
-#[nrf_softdevice::gatt_server]
-struct Server {
+// None of our current users take these as actual UUIDs...
+// let coap_gatt_us: Uuid = "8df804b7-3300-496d-9dfa-f8fb40a236bc".parse().unwrap();
+// let coap_gatt_uc: Uuid = "2a58fc3f-3c62-4ecc-8167-d66d4d9410c2".parse().unwrap();
+
+#[nrf_softdevice::gatt_service(uuid = "8df804b7-3300-496d-9dfa-f8fb40a236bc")]
+struct CoAPGattService {
+    #[characteristic(uuid = "2a58fc3f-3c62-4ecc-8167-d66d4d9410c2", read, write, indicate)]
+    // 700 doesn't work, 400 gets at least past startup, but let's start with unproblematic values
+    message: heapless::Vec<u8, 200>,
 }
 
-/// This alternates between sending advertisements (when connectable) and ... not yet processing
-/// any connections.
+// The only GATT attribute we're offering is the CoAP endpoint.
+#[nrf_softdevice::gatt_server]
+struct Server {
+    coap: CoAPGattService,
+}
+
+/// This alternates between sending advertisements (when connectable) and processing a single
+/// connection
 #[embassy_executor::task]
 async fn bluetooth_task(sd: &'static Softdevice, server: Server) {
     #[rustfmt::skip]
@@ -106,6 +118,10 @@ async fn bluetooth_task(sd: &'static Softdevice, server: Server) {
     let scan_data = &[
         // AD structure 3: Shortened local name
         0x09, 0x08, b'C', b'o', b'A', b'P', b'-', b'A', b'C', b'E',
+        // AD structure: Incomplete list of 128-bit Service Class UUIDs -- beware the endianness
+        // (we could also send a complete one, not-sure/not-care at this stage)
+        // Data from coap_gatt_us (but we build this literally right now, so meh)
+        0x11, 0x06, 0xbc, 0x36, 0xa2, 0x40, 0xfb, 0xf8, 0xfa, 0x9d, 0x6d, 0x49, 0x00, 0x33, 0xb7, 0x04, 0xf8, 0x8d,
     ];
 
     loop {
@@ -113,9 +129,27 @@ async fn bluetooth_task(sd: &'static Softdevice, server: Server) {
         let adv = peripheral::ConnectableAdvertisement::ScannableUndirected { adv_data, scan_data };
         let conn = unwrap!(peripheral::advertise_connectable(sd, adv, &config).await);
 
-        // We're advertising as connectable, but we don't handle any connections yet
-        let _ = conn;
-        let _ = &server;
+        info!("Advertising phase over");
+
+        // FIXME: Softdevice does support concurrent connections, do they need dedicated tasks?
+        gatt_server::run(&conn, &server, |e| match e {
+            ServerEvent::Coap(e) => match e {
+                CoAPGattServiceEvent::MessageWrite(m) => {
+                    info!("Message: {}, setting empty 2.05 response", &*m);
+
+                    unwrap!(server.coap.message_set(unwrap!(heapless::Vec::from_slice(&[0x45]))));
+                },
+                CoAPGattServiceEvent::MessageCccdWrite { indications: ind } => {
+                    // Indications are currently specified but not implemented
+                    info!("Indications: {}", ind);
+                }
+            },
+        })
+        .await
+        .unwrap_or_else(|e| match e {
+            gatt_server::RunError::Disconnected => info!("Peer disconnected"),
+            gatt_server::RunError::Raw(e) => error!("Error from gat_server: {:?}", e),
+        });
     }
 }
 
