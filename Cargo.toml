@@ -2,6 +2,8 @@
 name = "coap-ace-poc-firmware"
 version = "0.1.0"
 edition = "2021"
+authors = [ "EDF, developed in collaboration with Christian Amsüss" ]
+license = "BSD-3-Clause"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -16,6 +18,7 @@ hardware-nrf52dk = []
 debug = 2
 
 [dependencies]
+heapless = "*"
 # Providing general entry
 cortex-m-rt = "0.7.0"
 

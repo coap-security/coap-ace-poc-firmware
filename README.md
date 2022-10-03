@@ -68,8 +68,13 @@ The workings -- getting to know the components
 License
 -------
 
-The software is proprietary and confidential until properly released;
-it is expected to be released under 3-clause BSD terms.
+Copyright 2022 EDF. This software was developed in collaboration with Christian Amsüss.
 
-Note that upon linking against the softdevice,
-the softdevice's license terms become part of what governs the use of the resulting program.
+This software is published under the terms of the BSD-3-Clause license
+as detailed in [LICENSE.md].
+
+Note that additional terms may apply to the built output.
+In particular,
+the [softdevice's license] terms become part of what governs the use of the resulting program.
+
+[softdevice's license]: https://www.nordicsemi.com/Products/Development-software/s132/download
