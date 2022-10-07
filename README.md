@@ -29,6 +29,7 @@ The technology stack it demonstrates by this is
 [ACE OSCORE profile (RFC9203)]: https://www.rfc-editor.org/rfc/rfc9203.html
 [OSCORE (RFC8613)]: https://www.rfc-editor.org/rfc/rfc8613.html
 [CoAP (RFC7252)]: https://www.rfc-editor.org/rfc/rfc7252.html
+[CoAP-over-GATT (`draft-amsuess-core-coap-over-gatt-02`)]: https://www.ietf.org/archive/id/draft-amsuess-core-coap-over-gatt-02.html
 
 Quick start: Running the proof-of-concept demo
 ----------------------------------------------
@@ -74,7 +75,7 @@ License
 Copyright 2022 EDF. This software was developed in collaboration with Christian Amsüss.
 
 This software is published under the terms of the BSD-3-Clause license
-as detailed in [LICENSE.md].
+as detailed in [LICENSE file](LICENSE.md).
 
 Note that additional terms may apply to the built output.
 In particular,
