@@ -1,0 +1,31 @@
+pages:
+  image: rustdocker/rust:nightly
+  script:
+    - rustup target add thumbv7em-none-eabihf --toolchain nightly
+    - apt-get update && apt-get install -y wget unzip srecord
+    - sh -x ./build-hexfile.sh
+    - mkdir public
+    - |
+      cat > public/index.html <<EOF
+      <!DOCTYPE html>
+      <html>
+      <head>
+      <title>CoAP/ACE PoC: Firmware download</title>
+      <style>html { font-family: sans-serif; }</style>
+      </head>
+      <body>
+      <h1>CoAP/ACE PoC: Firmware download</h1>
+      <p>Available files:</p>
+      <ul><li><a href="coap-ace-poc-firmware.hex" download>coap-ace-poc-firmware.hex</a></li></ul>
+      <footer>
+      <p>Please refer to the
+      <a href="https://gitlab.com/oscore/coap-ace-poc-firmware/-/blob/main/README.md">project REAMDE file</a>
+      for context, license information and usage instructions.</p>
+      </footer>
+      </body>
+      </html>
+      EOF
+    - mv coap-ace-poc-firmware.hex public/
+  artifacts:
+    paths:
+      - public

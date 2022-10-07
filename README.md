@@ -34,8 +34,8 @@ Quick start: Running the proof-of-concept demo
 ----------------------------------------------
 
 * Obtain an [nRF52-DK] device; connect it via USB to a computer and move its power switch to the "on" position.
-* Download the latest build of this firmware from TBD as `TBD.hex`.
-* Copy the file `TBD.hex` onto the "JLINK" USB drive that has appeared on your computer.
+* Download the latest build of this firmware [from the build site] as [`coap-ace-poc-firmware.hex`].
+* Copy the file `coap-ace-poc-firmware.hex` onto the "JLINK" USB drive that has appeared on your computer.
 * Restart the board by moving the board's power switch to "off" and back to "on".
   <!-- Merely pressing the BOOT/RESET button is insufficient. -->
 * Direct a Bluetooth capable's cellphone web browser (Chrome or Chromium) to TBD. Follow the login instructions, picking either the role of the "junior" or the "senior".
@@ -47,6 +47,9 @@ Quick start: Running the proof-of-concept demo
 
   For illustration purposes, the web application is not made aware of the permission levels,
   and unauthorized control attempts will fail.
+
+[from the build site]: https://oscore.gitlab.io/coap-ace-poc-firmware/
+[`coap-ace-poc-firmware.hex`]: https://oscore.gitlab.io/coap-ace-poc-firmware/coap-ace-poc-firmware.hex
 
 The workings -- getting to know the components
 ----------------------------------------------
