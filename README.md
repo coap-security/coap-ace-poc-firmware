@@ -39,7 +39,8 @@ Quick start: Running the proof-of-concept demo
 * Copy the file `coap-ace-poc-firmware.hex` onto the "JLINK" USB drive that has appeared on your computer.
 * Restart the board by moving the board's power switch to "off" and back to "on".
   <!-- Merely pressing the BOOT/RESET button is insufficient. -->
-* Direct a Bluetooth capable's cellphone web browser (Chrome or Chromium) to TBD. Follow the login instructions, picking either the role of the "junior" or the "senior".
+* Direct a Bluetooth capable's cellphone web browser (Chrome or Chromium) to [the corresponding web app].
+  Follow the login instructions, picking either the role of the "junior" or the "senior".
 
   You may also install the mobile application through the browser's "Install app" button.
 
@@ -51,6 +52,7 @@ Quick start: Running the proof-of-concept demo
 
 [from the build site]: https://oscore.gitlab.io/coap-ace-poc-firmware/
 [`coap-ace-poc-firmware.hex`]: https://oscore.gitlab.io/coap-ace-poc-firmware/coap-ace-poc-firmware.hex
+[the corresponding web app]: https://oscore.gitlab.io/coap-ace-poc-webapp/
 
 The workings -- getting to know the components
 ----------------------------------------------
@@ -61,7 +63,7 @@ The workings -- getting to know the components
 
   That also contains further references for the components used inside the firmware.
 
-* The web application is built from source at TBD
+* The web application is built from source at https://gitlab.com/oscore/coap-ace-poc-webapp/
   and documented at TBD.
   The web application is built into a static web site,
   which can be served by any modern web server.
