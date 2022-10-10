@@ -97,6 +97,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
+name = "cast"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
+
+[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -115,6 +121,7 @@ dependencies = [
  "heapless",
  "nrf-softdevice",
  "nrf-softdevice-s132",
+ "nrf52832-hal",
  "panic-probe",
 ]
 
@@ -402,6 +409,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "embedded-dma"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "994f7e5b5cb23521c22304927195f236813053eb9c065dd2226a32ba64695446"
+dependencies = [
+ "stable_deref_trait",
+]
+
+[[package]]
 name = "embedded-hal"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -607,6 +623,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "546c37ac5d9e56f55e73b677106873d9d9f5190605e41a856503623648488cae"
 
 [[package]]
+name = "nrf-hal-common"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "089242b8b729622099054dcb5518e9eac80bcf6a7e30091c7cfa043383e9998c"
+dependencies = [
+ "cast",
+ "cfg-if",
+ "cortex-m",
+ "embedded-dma",
+ "embedded-hal 0.2.7",
+ "embedded-storage",
+ "fixed",
+ "nb 1.0.0",
+ "nrf52832-pac",
+ "rand_core",
+ "void",
+]
+
+[[package]]
 name = "nrf-softdevice"
 version = "0.1.0"
 source = "git+https://github.com/embassy-rs/nrf-softdevice?rev=e1e4e2a2c2e9a8243368214fac02532e79c127a8#e1e4e2a2c2e9a8243368214fac02532e79c127a8"
@@ -645,6 +680,17 @@ dependencies = [
 name = "nrf-softdevice-s132"
 version = "0.1.1"
 source = "git+https://github.com/embassy-rs/nrf-softdevice?rev=e1e4e2a2c2e9a8243368214fac02532e79c127a8#e1e4e2a2c2e9a8243368214fac02532e79c127a8"
+
+[[package]]
+name = "nrf52832-hal"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7cc6dfe793aa447f9822d13353ab4f24606354e5e4c1ffd7887872e4df743550"
+dependencies = [
+ "embedded-hal 0.2.7",
+ "nrf-hal-common",
+ "nrf52832-pac",
+]
 
 [[package]]
 name = "nrf52832-pac"

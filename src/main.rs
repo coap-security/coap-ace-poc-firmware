@@ -181,6 +181,25 @@ fn main() -> ! {
 
     let executor = EXECUTOR.put(Executor::new());
 
+    // FIXME Does nothing else in embassy or Softdevice use any of these?
+    let peripherals = nrf52832_hal::pac::Peripherals::take().unwrap();
+
+    let pins = nrf52832_hal::gpio::p0::Parts::new(peripherals.P0);
+
+    // See https://infocenter.nordicsemi.com/topic/ug_nrf52832_dk/UG/nrf52_DK/hw_btns_leds.html
+    let mut led1_pin = pins.p0_17
+        .into_push_pull_output(nrf52832_hal::gpio::Level::High);
+    let mut led2_pin = pins.p0_18
+        .into_push_pull_output(nrf52832_hal::gpio::Level::High);
+    let mut led3_pin = pins.p0_19
+        .into_push_pull_output(nrf52832_hal::gpio::Level::High);
+    let mut led4_pin = pins.p0_20
+        .into_push_pull_output(nrf52832_hal::gpio::Level::High);
+
+    use nrf52832_hal::prelude::OutputPin;
+    led1_pin.set_low();
+    led4_pin.set_low();
+
     executor.run(move |spawner| {
         let server = unwrap!(Server::new(sd));
         unwrap!(spawner.spawn(softdevice_task(sd)));

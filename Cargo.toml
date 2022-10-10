@@ -37,6 +37,9 @@ nrf-softdevice = { version = "0.1.0", features = ["defmt", "nrf52832", "s132", "
 # building on 132 to ensure we can migrate over.
 nrf-softdevice-s132 = "0.1.1"
 
+# LEDs and buttons, really
+nrf52832-hal = "0.15.1"
+
 # Providing time for defmt output
 embassy-nrf = { version = "0.1.0", features = [ "nightly", "defmt", "nrf52832", "gpiote", "time-driver-rtc1" ]}
 
