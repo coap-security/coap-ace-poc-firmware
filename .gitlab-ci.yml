@@ -11,13 +11,20 @@ pages:
       <html>
       <head>
       <title>CoAP/ACE PoC: Firmware download</title>
-      <style>html { font-family: sans-serif; }</style>
+      <style>
+      html { font-family: sans-serif; }
+      .hash { display: inline; font-family: monospace; color: gray; }
+      .hash summary::before { content: ">" }
+      .hash[open] summary::before { content: "<" }
+      .hash summary { display: inline; margin-left: 1em; font-family: sans-serif; }
+      </style>
       </head>
       <body>
       <h1>CoAP/ACE PoC: Firmware download</h1>
       <p>Available files:</p>
-      <ul><li><a href="coap-ace-poc-firmware.hex" download>coap-ace-poc-firmware.hex</a></li></ul>
+      <ul><li><a href="coap-ace-poc-firmware.hex" download>coap-ace-poc-firmware.hex</a> <details class="hash"><summary>SHA256sum</summary> `sha256sum coap-ace-poc-firmware.hex | cut -d" " -f1`</li></ul>
       <footer>
+      <p>Built from version `git describe --always`.</p>
       <p>Please refer to the
       <a href="https://gitlab.com/oscore/coap-ace-poc-firmware/-/blob/main/README.md">project REAMDE file</a>
       for context, license information and usage instructions.</p>
