@@ -112,8 +112,9 @@ dependencies = [
  "embassy-executor",
  "embassy-nrf",
  "embassy-util",
+ "heapless",
  "nrf-softdevice",
- "nrf-softdevice-s112",
+ "nrf-softdevice-s132",
  "panic-probe",
 ]
 
@@ -622,7 +623,7 @@ dependencies = [
  "futures",
  "heapless",
  "nrf-softdevice-macro",
- "nrf-softdevice-s112",
+ "nrf-softdevice-s132",
  "nrf52832-pac",
  "num_enum",
 ]
@@ -641,7 +642,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "nrf-softdevice-s112"
+name = "nrf-softdevice-s132"
 version = "0.1.1"
 source = "git+https://github.com/embassy-rs/nrf-softdevice?rev=e1e4e2a2c2e9a8243368214fac02532e79c127a8#e1e4e2a2c2e9a8243368214fac02532e79c127a8"
 
