@@ -30,5 +30,5 @@ unzip "$OURTMP"/s132_nrf52_7.3.0.zip s132_nrf52_7.3.0_softdevice.hex -d "$OURTMP
 # * The hex files provided by Nordic have no start address. (eg.
 #   proximity_demo/ble_app_proximity_s132_pca10040.hex,
 #   heart_rate_demo/heart_rate_demo.hex).
-srec_cat -disable Execution_Start_Address "$OURTMP"/firmware.hex -Intel "$OURTMP"/s132_nrf52_7.3.0_softdevice.hex -Intel -o coap-ace-poc-firmware.hex -Intel -Output_Block_Size 16
+srec_cat -disable Execution_Start_Address ./uicr_reset_pin21.hex -Intel "$OURTMP"/firmware.hex -Intel "$OURTMP"/s132_nrf52_7.3.0_softdevice.hex -Intel -o coap-ace-poc-firmware.hex -Intel -Output_Block_Size 16
 rm -rf "${OURTMP}"

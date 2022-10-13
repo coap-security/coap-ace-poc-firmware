@@ -1,0 +1,13 @@
+// Data that needs to be present at flashing time in order to make the device
+// react to the reset pin. (We could set that at run time, but why, this
+// belongs to flash time). It's convenient that enabling the reset pin at flash
+// time makes the device come up cleanly after a copy-to-USB-disk flash.
+//
+// Register UICR->PSELRESET[0] is at 10001200, value should be "pin 21, and connected"
+// Address is from (note we can't have colons in the comments in here)
+// https..//infocenter.nordicsemi.com/topic/com.nordic.infocenter.nrf52832.ps.v1.1/uicr.html?cp=4_2_0_13_0_59#register.PSELRESET-0
+//
+// Checksums found using `srec_cat uicr_reset_pin21.hex -Intel -o /dev/stdout -Intel`
+:020000041000EA
+:0812000015FFFF7F15FFFF7FC2
+:00000001FF
