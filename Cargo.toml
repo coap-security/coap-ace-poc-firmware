@@ -28,8 +28,7 @@ defmt-rtt = "0.3.2"
 panic-probe = { version = "0.3", features= ["print-defmt"] }
 
 # Providing an asynchronous runtime needed for the softdevice
-embassy-executor = { version = "0.1.0", features = ["nightly", "defmt", "defmt-timestamp-uptime"]}
-embassy-util = "0.1.0"
+embassy-executor = { version = "0.1.0", features = ["nightly", "defmt"]}
 # ... and helpers to get the 'static Server we need in the runners
 static_cell = "1"
 
@@ -47,10 +46,9 @@ embassy-nrf = { version = "0.1.0", features = [ "nightly", "defmt", "nrf52832", 
 
 [patch.crates-io]
 # None of these are available on crates.io yet
-embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "d881f3ad9186cf3279aa1ba27093bad94035c186" }
-embassy-util = { git = "https://github.com/embassy-rs/embassy", rev = "d881f3ad9186cf3279aa1ba27093bad94035c186" }
-embassy-nrf = { git = "https://github.com/embassy-rs/embassy", rev = "d881f3ad9186cf3279aa1ba27093bad94035c186" }
-embassy-macros = { git = "https://github.com/embassy-rs/embassy", rev = "d881f3ad9186cf3279aa1ba27093bad94035c186" }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "cea29d7de3169cf2212128e0386e5d57053cc12d" }
+embassy-nrf = { git = "https://github.com/embassy-rs/embassy", rev = "cea29d7de3169cf2212128e0386e5d57053cc12d" }
+embassy-macros = { git = "https://github.com/embassy-rs/embassy", rev = "cea29d7de3169cf2212128e0386e5d57053cc12d" }
 
-nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "e1e4e2a2c2e9a8243368214fac02532e79c127a8" }
-nrf-softdevice-s132 = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "e1e4e2a2c2e9a8243368214fac02532e79c127a8" }
+nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "74a9526c59c33e28d2dcc7357a9cb5288be58c60" }
+nrf-softdevice-s132 = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "74a9526c59c33e28d2dcc7357a9cb5288be58c60" }

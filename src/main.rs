@@ -64,12 +64,11 @@ use panic_probe as _;
 
 use cortex_m_rt::entry;
 use defmt::{info, warn, error, unwrap};
-use embassy_executor::executor::{Executor, Spawner};
-use embassy_util::Forever;
+use embassy_executor::{Executor, Spawner};
 use nrf_softdevice::ble::{gatt_server, peripheral};
 use nrf_softdevice::{raw, Softdevice};
 
-static EXECUTOR: Forever<Executor> = Forever::new();
+static EXECUTOR: static_cell::StaticCell<Executor> = static_cell::StaticCell::new();
 
 // Careful: Must match the executor::task(pool_size) manually
 const MAX_CONNECTIONS: u8 = 2;
@@ -281,7 +280,7 @@ fn main() -> ! {
 
     let sd = Softdevice::enable(&config);
 
-    let executor = EXECUTOR.put(Executor::new());
+    let executor = EXECUTOR.init(Executor::new());
 
     static SERVER: static_cell::StaticCell<Server> = static_cell::StaticCell::new();
     let server = SERVER.init(unwrap!(Server::new(sd)));
