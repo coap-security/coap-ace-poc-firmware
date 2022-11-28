@@ -197,6 +197,51 @@ async fn bluetooth_task(sd: &'static Softdevice, server: &'static Server, spawne
     }
 }
 
+/// Set the LEDs into an easily recognizable diagonal position that indicates readiness
+///
+/// In parallel, this fixes the UICR state, and indicates that things were fixed using the top
+/// right LED.
+fn chip_startup() {
+    // FIXME Does nothing else in embassy or Softdevice use any of these?
+    let mut peripherals = nrf52832_hal::pac::Peripherals::take().unwrap();
+
+    let was_21 = peripherals.UICR.pselreset[0].read().pin().bits() == 21;
+
+    info!("UICR bit sets {:x} {:x}", peripherals.UICR.pselreset[0].read().bits(), peripherals.UICR.pselreset[1].read().bits());
+    info!("UICR0 is pin {} connected {}", peripherals.UICR.pselreset[0].read().pin().bits(), peripherals.UICR.pselreset[0].read().connect().bits());
+    info!("UICR1 is pin {} connected {}", peripherals.UICR.pselreset[1].read().pin().bits(), peripherals.UICR.pselreset[1].read().connect().bits());
+
+    let mut nvmc = &mut peripherals.NVMC;
+    nvmc.config.write(|w| w.wen().wen());
+    peripherals.UICR.pselreset[0].write(|w| unsafe { w.pin().bits(21).connect().connected() });
+    peripherals.UICR.pselreset[1].write(|w| unsafe { w.pin().bits(21).connect().connected() });
+    nvmc.config.reset();
+
+    info!("UICR bit sets {:x} {:x}", peripherals.UICR.pselreset[0].read().bits(), peripherals.UICR.pselreset[1].read().bits());
+    info!("UICR0 is pin {} connected {}", peripherals.UICR.pselreset[0].read().pin().bits(), peripherals.UICR.pselreset[0].read().connect().bits());
+    info!("UICR1 is pin {} connected {}", peripherals.UICR.pselreset[1].read().pin().bits(), peripherals.UICR.pselreset[1].read().connect().bits());
+
+
+    let pins = nrf52832_hal::gpio::p0::Parts::new(peripherals.P0);
+
+    // See https://infocenter.nordicsemi.com/topic/ug_nrf52832_dk/UG/nrf52_DK/hw_btns_leds.html
+    let mut led1_pin = pins.p0_17
+        .into_push_pull_output(nrf52832_hal::gpio::Level::High);
+    let mut led2_pin = pins.p0_18
+        .into_push_pull_output(nrf52832_hal::gpio::Level::High);
+    let mut led3_pin = pins.p0_19
+        .into_push_pull_output(nrf52832_hal::gpio::Level::High);
+    let mut led4_pin = pins.p0_20
+        .into_push_pull_output(nrf52832_hal::gpio::Level::High);
+
+    use nrf52832_hal::prelude::OutputPin;
+    led1_pin.set_low();
+    led4_pin.set_low();
+    if was_21 {
+        led2_pin.set_low();
+    }
+}
+
 /// Entry function
 ///
 /// This assembles the configuration, starts up the softdevice, and lets both the softdevice and a
@@ -232,28 +277,11 @@ fn main() -> ! {
         ..Default::default()
     };
 
+    chip_startup();
+
     let sd = Softdevice::enable(&config);
 
     let executor = EXECUTOR.put(Executor::new());
-
-    // FIXME Does nothing else in embassy or Softdevice use any of these?
-    let peripherals = nrf52832_hal::pac::Peripherals::take().unwrap();
-
-    let pins = nrf52832_hal::gpio::p0::Parts::new(peripherals.P0);
-
-    // See https://infocenter.nordicsemi.com/topic/ug_nrf52832_dk/UG/nrf52_DK/hw_btns_leds.html
-    let mut led1_pin = pins.p0_17
-        .into_push_pull_output(nrf52832_hal::gpio::Level::High);
-    let mut led2_pin = pins.p0_18
-        .into_push_pull_output(nrf52832_hal::gpio::Level::High);
-    let mut led3_pin = pins.p0_19
-        .into_push_pull_output(nrf52832_hal::gpio::Level::High);
-    let mut led4_pin = pins.p0_20
-        .into_push_pull_output(nrf52832_hal::gpio::Level::High);
-
-    use nrf52832_hal::prelude::OutputPin;
-    led1_pin.set_low();
-    led4_pin.set_low();
 
     static SERVER: static_cell::StaticCell<Server> = static_cell::StaticCell::new();
     let server = SERVER.init(unwrap!(Server::new(sd)));
