@@ -123,6 +123,7 @@ dependencies = [
  "nrf-softdevice-s132",
  "nrf52832-hal",
  "panic-probe",
+ "static_cell",
 ]
 
 [[package]]
@@ -447,9 +448,9 @@ dependencies = [
 
 [[package]]
 name = "embedded-io"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36673b79844ff4ec0e3f00aeca0b2cfff564ff6739ab9801d13f45a8ec6cc1c7"
+checksum = "33dfba9e6c113f2fd8537c943780a7345945e66c86972e356b1152e19481bcf5"
 dependencies = [
  "defmt",
 ]
@@ -899,6 +900,15 @@ name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
+
+[[package]]
+name = "static_cell"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4c37c250d21f53fa7165e76e5401d7e6539c211a8d2cf449e3962956a5cc2ce"
+dependencies = [
+ "atomic-polyfill 1.0.1",
+]
 
 [[package]]
 name = "strsim"

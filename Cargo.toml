@@ -30,6 +30,8 @@ panic-probe = { version = "0.3", features= ["print-defmt"] }
 # Providing an asynchronous runtime needed for the softdevice
 embassy-executor = { version = "0.1.0", features = ["nightly", "defmt", "defmt-timestamp-uptime"]}
 embassy-util = "0.1.0"
+# ... and helpers to get the 'static Server we need in the runners
+static_cell = "1"
 
 # Hardware support
 nrf-softdevice = { version = "0.1.0", features = ["defmt", "nrf52832", "s132", "ble-peripheral", "critical-section-impl", "ble-gatt-server" ] }

@@ -63,13 +63,26 @@ use embassy_nrf as _;
 use panic_probe as _;
 
 use cortex_m_rt::entry;
-use defmt::{info, error, unwrap};
-use embassy_executor::executor::Executor;
+use defmt::{info, warn, error, unwrap};
+use embassy_executor::executor::{Executor, Spawner};
 use embassy_util::Forever;
 use nrf_softdevice::ble::{gatt_server, peripheral};
 use nrf_softdevice::{raw, Softdevice};
 
 static EXECUTOR: Forever<Executor> = Forever::new();
+
+// Careful: Must match the executor::task(pool_size) manually
+const MAX_CONNECTIONS: u8 = 2;
+// Number of active BLE connections. This only roughly corresponds to the number of blueworker
+// tasks running (as the only time we can decrement that counter is before blueworker returns).
+// It's important to keep that counter pessimistic w/rt the actually used softdevice connections,
+// for the softdevice would be very unhappy if a connectable advertisement were to be requested
+// while there are no free connections. (Trying to create a task will just abort the connection
+// late, which is OK for being in a racy situation).
+//
+// This is used with SeqCst for laziness; a better solution would be
+// https://github.com/embassy-rs/embassy/issues/1080 anyway.
+static USED_CONNECTIONS: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
 
 /// Background task in which the Softdevice handless all its tasks.
 ///
@@ -97,10 +110,36 @@ struct Server {
     coap: CoAPGattService,
 }
 
+// Careful: must match MAX_CONNECTIONS
+#[embassy_executor::task(pool_size=2)]
+async fn blueworker(server: &'static Server, conn: nrf_softdevice::ble::Connection) {
+    info!("Running new BLE connection");
+    gatt_server::run(&conn, server, |e| match e {
+        ServerEvent::Coap(e) => match e {
+            CoAPGattServiceEvent::MessageWrite(m) => {
+                info!("Message: {}, setting empty 2.05 response", &*m);
+
+                unwrap!(server.coap.message_set(unwrap!(heapless::Vec::from_slice(&[0x45]))));
+            },
+            CoAPGattServiceEvent::MessageCccdWrite { indications: ind } => {
+                // Indications are currently specified but not implemented
+                info!("Indications: {}", ind);
+            }
+        },
+    })
+    .await
+    .unwrap_or_else(|e| match e {
+        gatt_server::RunError::Disconnected => info!("Peer disconnected"),
+        gatt_server::RunError::Raw(e) => error!("Error from gat_server: {:?}", e),
+    });
+
+    USED_CONNECTIONS.fetch_sub(1, core::sync::atomic::Ordering::SeqCst);
+}
+
 /// This alternates between sending advertisements (when connectable) and processing a single
 /// connection
 #[embassy_executor::task]
-async fn bluetooth_task(sd: &'static Softdevice, server: Server) {
+async fn bluetooth_task(sd: &'static Softdevice, server: &'static Server, spawner: Spawner) {
     #[rustfmt::skip]
     let adv_data = &[
         // length, type, value; types see Generic Access Profile
@@ -125,31 +164,36 @@ async fn bluetooth_task(sd: &'static Softdevice, server: Server) {
     ];
 
     loop {
-        let config = peripheral::Config::default();
+        while USED_CONNECTIONS.load(core::sync::atomic::Ordering::SeqCst) >= MAX_CONNECTIONS {
+            info!("Connections full; advertising unconnectable");
+            // FIXME: Does this need to contain different info?
+            let adv = peripheral::NonconnectableAdvertisement::ScannableUndirected { adv_data, scan_data };
+            let nonconn = peripheral::advertise(sd, adv, &peripheral::Config {
+                // We can't easily cancel a running advertisement, so if we're at the connection limit,
+                // we just terminate occasionally to check if there's a free slot now.
+                timeout: Some(500 /* x 10ms = 5s */),
+                ..Default::default()
+            }).await;
+        }
+
+        info!("Advertising as connectable until a connection is establsihed");
         let adv = peripheral::ConnectableAdvertisement::ScannableUndirected { adv_data, scan_data };
-        let conn = unwrap!(peripheral::advertise_connectable(sd, adv, &config).await);
+        USED_CONNECTIONS.fetch_add(1, core::sync::atomic::Ordering::SeqCst);
+        let conn = peripheral::advertise_connectable(sd, adv, &peripheral::Config::default()).await;
 
-        info!("Advertising phase over");
+        let conn = match conn {
+            Ok(c) => c,
+            Err(e) => {
+                error!("Failed to advertise connectable due to {:?}, continuing", e);
+                continue;
+            }
+        };
 
-        // FIXME: Softdevice does support concurrent connections, do they need dedicated tasks?
-        gatt_server::run(&conn, &server, |e| match e {
-            ServerEvent::Coap(e) => match e {
-                CoAPGattServiceEvent::MessageWrite(m) => {
-                    info!("Message: {}, setting empty 2.05 response", &*m);
-
-                    unwrap!(server.coap.message_set(unwrap!(heapless::Vec::from_slice(&[0x45]))));
-                },
-                CoAPGattServiceEvent::MessageCccdWrite { indications: ind } => {
-                    // Indications are currently specified but not implemented
-                    info!("Indications: {}", ind);
-                }
-            },
-        })
-        .await
-        .unwrap_or_else(|e| match e {
-            gatt_server::RunError::Disconnected => info!("Peer disconnected"),
-            gatt_server::RunError::Raw(e) => error!("Error from gat_server: {:?}", e),
-        });
+        if let Err(_) = spawner.spawn(blueworker(server, conn)) {
+            // Counting should make sure this never happens, but it's a bit racy.
+            warn!("Spawn failure, dropping conn right away");
+            USED_CONNECTIONS.fetch_sub(1, core::sync::atomic::Ordering::SeqCst);
+        }
     }
 }
 
@@ -173,6 +217,17 @@ fn main() -> ! {
             write_perm: nrf_softdevice_s132::ble_gap_conn_sec_mode_t { _bitfield_1: raw::ble_gap_conn_sec_mode_t::new_bitfield_1(0, 0) },
             // No writes allowed or planned, so we can just take the const pointer.
             _bitfield_1: raw::ble_gap_cfg_device_name_t::new_bitfield_1(raw::BLE_GATTS_VLOC_USER as u8),
+        }),
+        conn_gap: Some(raw::ble_gap_conn_cfg_t {
+            conn_count: MAX_CONNECTIONS,
+            event_length: raw::BLE_GAP_EVENT_LENGTH_DEFAULT as _,
+        }),
+        gap_role_count: Some(raw::ble_gap_cfg_role_count_t {
+            adv_set_count: 1,
+            periph_role_count: MAX_CONNECTIONS,
+            central_role_count: 0,
+            central_sec_count: 0,
+            _bitfield_1: Default::default(),
         }),
         ..Default::default()
     };
@@ -200,10 +255,12 @@ fn main() -> ! {
     led1_pin.set_low();
     led4_pin.set_low();
 
+    static SERVER: static_cell::StaticCell<Server> = static_cell::StaticCell::new();
+    let server = SERVER.init(unwrap!(Server::new(sd)));
+
     executor.run(move |spawner| {
-        let server = unwrap!(Server::new(sd));
         unwrap!(spawner.spawn(softdevice_task(sd)));
-        unwrap!(spawner.spawn(bluetooth_task(sd, server)));
+        unwrap!(spawner.spawn(bluetooth_task(sd, server, spawner)));
         info!("Tasks are active.");
     });
 }
