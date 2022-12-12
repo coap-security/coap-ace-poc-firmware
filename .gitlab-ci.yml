@@ -33,6 +33,9 @@ pages:
       </html>
       EOF
     - mv coap-ace-poc-firmware.hex public/
+
+    - cargo +nightly doc
+    - mv -target/thumbv7em-none-eabihf/doc public/doc
   artifacts:
     paths:
       - public

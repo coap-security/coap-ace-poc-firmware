@@ -57,17 +57,21 @@ The workings -- getting to know the components
 
 * Instructions on how to build the firmware,
   as well as how to alter or extend it,
-  can be found in the firmware's TBD documentation.
+  can be found in the [firmware's documentation].
 
   That also contains further references for the components used inside the firmware.
 
 * The web application is built from source at https://gitlab.com/oscore/coap-ace-poc-webapp/
-  and documented at TBD.
+  and [documented there as well].
   The web application is built into a static web site,
   which can be served by any modern web server.
 
 * Backing the authentication is an ACE Authorization Server (AS).
   Its setup and operatioins are described on TBD.
+
+
+[firmware's documentation]: https://oscore.gitlab.io/coap-ace-poc-firmware/doc/
+[documented there as well]: https://oscore.gitlab.io/coap-ace-poc-webapp/doc/
 
 License
 -------
