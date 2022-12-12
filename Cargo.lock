@@ -15,6 +15,7 @@ dependencies = [
 [[package]]
 name = "ace-oscore-helpers"
 version = "0.1.0"
+source = "git+https://gitlab.com/oscore/ace-oscore-helpers/#56cf7dbcc053216f7c1233e52e4579e788fac7a7"
 dependencies = [
  "aead",
  "aes",
@@ -230,7 +231,7 @@ version = "0.1.0"
 dependencies = [
  "ace-oscore-helpers",
  "ciborium",
- "coap-gatt-implementations",
+ "coap-gatt-utils",
  "coap-handler",
  "coap-handler-implementations",
  "coap-message",
@@ -257,8 +258,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "coap-gatt-implementations"
+name = "coap-gatt-utils"
 version = "0.1.0"
+source = "git+https://gitlab.com/oscore/coap-gatt-utils/#5ecb73400f07576dfcf35d55894f5aae256ec8bf"
 dependencies = [
  "coap-message",
  "coap-message-utils",
