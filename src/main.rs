@@ -57,6 +57,15 @@
 #![no_std]
 #![no_main]
 #![feature(type_alias_impl_trait)]
+#![feature(alloc_error_handler)]
+
+mod rs_configuration;
+mod coap_gatt;
+
+mod coap;
+mod blink;
+mod devicetime;
+mod alloc;
 
 use defmt_rtt as _;
 use embassy_nrf as _;
@@ -70,17 +79,19 @@ use nrf_softdevice::{raw, Softdevice};
 
 static EXECUTOR: static_cell::StaticCell<Executor> = static_cell::StaticCell::new();
 
-// Careful: Must match the executor::task(pool_size) manually
+/// Maximum number of concurrent BLE connections to manage
+///
+/// Careful: Must match the executor::task(pool_size) manually (see also [USED_CONNECTIONS])
 const MAX_CONNECTIONS: u8 = 2;
-// Number of active BLE connections. This only roughly corresponds to the number of blueworker
-// tasks running (as the only time we can decrement that counter is before blueworker returns).
-// It's important to keep that counter pessimistic w/rt the actually used softdevice connections,
-// for the softdevice would be very unhappy if a connectable advertisement were to be requested
-// while there are no free connections. (Trying to create a task will just abort the connection
-// late, which is OK for being in a racy situation).
-//
-// This is used with SeqCst for laziness; a better solution would be
-// https://github.com/embassy-rs/embassy/issues/1080 anyway.
+/// Number of active BLE connections. This only roughly corresponds to the number of blueworker
+/// tasks running (as the only time we can decrement that counter is before blueworker returns).
+/// It's important to keep that counter pessimistic w/rt the actually used softdevice connections,
+/// for the softdevice would be very unhappy if a connectable advertisement were to be requested
+/// while there are no free connections. (Trying to create a task will just abort the connection
+/// late, which is OK for being in a racy situation).
+///
+/// This is used with SeqCst for laziness; a better solution would be
+/// https://github.com/embassy-rs/embassy/issues/1080 anyway.
 static USED_CONNECTIONS: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
 
 /// Background task in which the Softdevice handless all its tasks.
@@ -109,16 +120,26 @@ struct Server {
     coap: CoAPGattService,
 }
 
-// Careful: must match MAX_CONNECTIONS
+type CoapHandlerMutex = embassy_sync::mutex::Mutex<embassy_sync::blocking_mutex::raw::NoopRawMutex, coap::CoapHandler>;
+
+/// Single Bluetooth connection handler
+///
+/// This is spawned from [bluetooth_task] once a connection arrives, and terminates at
+/// disconnection.
+// Careful: pool_size must match MAX_CONNECTIONS
 #[embassy_executor::task(pool_size=2)]
-async fn blueworker(server: &'static Server, conn: nrf_softdevice::ble::Connection) {
+async fn blueworker(server: &'static Server, conn: nrf_softdevice::ble::Connection, coap_handler: &'static CoapHandlerMutex) {
+    let mut cg = coap_gatt::Connection::new(|| coap_handler.try_lock().ok());
+
     info!("Running new BLE connection");
     gatt_server::run(&conn, server, |e| match e {
         ServerEvent::Coap(e) => match e {
             CoAPGattServiceEvent::MessageWrite(m) => {
-                info!("Message: {}, setting empty 2.05 response", &*m);
+                let response = cg.write(&*m);
 
-                unwrap!(server.coap.message_set(unwrap!(heapless::Vec::from_slice(&[0x45]))));
+                info!("Setting response {:?}", response);
+
+                unwrap!(server.coap.message_set(response));
             },
             CoAPGattServiceEvent::MessageCccdWrite { indications: ind } => {
                 // Indications are currently specified but not implemented
@@ -135,10 +156,15 @@ async fn blueworker(server: &'static Server, conn: nrf_softdevice::ble::Connecti
     USED_CONNECTIONS.fetch_sub(1, core::sync::atomic::Ordering::SeqCst);
 }
 
-/// This alternates between sending advertisements (when connectable) and processing a single
-/// connection
+/// Main Bluetooth task
+///
+/// This task is active throughout the device's lifetime, and manages the creation of
+/// per-connection tasks.
+///
+/// It alternates between sending connectable advertisements (when connectable) and unconnectable
+/// advertisements (while the pool of connections is exhausted).
 #[embassy_executor::task]
-async fn bluetooth_task(sd: &'static Softdevice, server: &'static Server, spawner: Spawner) {
+async fn bluetooth_task(sd: &'static Softdevice, server: &'static Server, spawner: Spawner, coap_handler: &'static CoapHandlerMutex) {
     #[rustfmt::skip]
     let adv_data = &[
         // length, type, value; types see Generic Access Profile
@@ -188,7 +214,7 @@ async fn bluetooth_task(sd: &'static Softdevice, server: &'static Server, spawne
             }
         };
 
-        if let Err(_) = spawner.spawn(blueworker(server, conn)) {
+        if let Err(_) = spawner.spawn(blueworker(server, conn, coap_handler)) {
             // Counting should make sure this never happens, but it's a bit racy.
             warn!("Spawn failure, dropping conn right away");
             USED_CONNECTIONS.fetch_sub(1, core::sync::atomic::Ordering::SeqCst);
@@ -196,42 +222,57 @@ async fn bluetooth_task(sd: &'static Softdevice, server: &'static Server, spawne
     }
 }
 
-/// Set the LEDs into an easily recognizable diagonal position that indicates readiness
+/// Parts of the peripherals that are needed by the application
+struct ChipParts {
+    leds: blink::LedPins,
+}
+
+/// Initialize chip peripherals, in particular LEDs.
 ///
-/// In parallel, this fixes the UICR state, and indicates that things were fixed using the top
-/// right LED.
-fn chip_startup() {
-    // FIXME Does nothing else in embassy or Softdevice use any of these?
-    let mut peripherals = nrf52832_hal::pac::Peripherals::take().unwrap();
+/// In parallel, this fixes the UICR state (see also ./uicr_reset_pin21.hex and associated
+/// commentary), and indicates that things were fixed in the initial LED status.
+///
+/// It returns all (possibly post-processed) peripherals that are needed later.
+fn chip_startup() -> ChipParts {
+    let mut config: embassy_nrf::config::Config = Default::default();
+    // We have these on the board
+    config.hfclk_source = embassy_nrf::config::HfclkSource::ExternalXtal;
+    config.lfclk_source = embassy_nrf::config::LfclkSource::ExternalXtal;
+    // Differing from default, these stay out of softdevice's hair
+    config.gpiote_interrupt_priority = embassy_nrf::interrupt::Priority::P7;
+    config.time_interrupt_priority = embassy_nrf::interrupt::Priority::P6;
 
-    let was_21 = peripherals.UICR.pselreset[0].read().pin().bits() == 21;
+    let peripherals = embassy_nrf::init(config);
 
-    info!("UICR bit sets {:x} {:x}", peripherals.UICR.pselreset[0].read().bits(), peripherals.UICR.pselreset[1].read().bits());
-    info!("UICR0 is pin {} connected {}", peripherals.UICR.pselreset[0].read().pin().bits(), peripherals.UICR.pselreset[0].read().connect().bits());
-    info!("UICR1 is pin {} connected {}", peripherals.UICR.pselreset[1].read().pin().bits(), peripherals.UICR.pselreset[1].read().connect().bits());
+    // FIXME this should probably conflict with embassy_nrf's init
+    //
+    // Preferably those should be forwarded by embassy_nrf
+    let bare_peripherals = unwrap!(nrf52832_hal::pac::Peripherals::take());
+    let UICR = bare_peripherals.UICR;
 
-    let mut nvmc = &mut peripherals.NVMC;
+    let was_21 = UICR.pselreset[0].read().pin().bits() == 21;
+
+    info!("UICR bit sets {:x} {:x}", UICR.pselreset[0].read().bits(), UICR.pselreset[1].read().bits());
+    info!("UICR0 is pin {} connected {}", UICR.pselreset[0].read().pin().bits(), UICR.pselreset[0].read().connect().bits());
+    info!("UICR1 is pin {} connected {}", UICR.pselreset[1].read().pin().bits(), UICR.pselreset[1].read().connect().bits());
+
+    let mut nvmc = bare_peripherals.NVMC;
     nvmc.config.write(|w| w.wen().wen());
-    peripherals.UICR.pselreset[0].write(|w| unsafe { w.pin().bits(21).connect().connected() });
-    peripherals.UICR.pselreset[1].write(|w| unsafe { w.pin().bits(21).connect().connected() });
+    UICR.pselreset[0].write(|w| unsafe { w.pin().bits(21).connect().connected() });
+    UICR.pselreset[1].write(|w| unsafe { w.pin().bits(21).connect().connected() });
     nvmc.config.reset();
 
-    info!("UICR bit sets {:x} {:x}", peripherals.UICR.pselreset[0].read().bits(), peripherals.UICR.pselreset[1].read().bits());
-    info!("UICR0 is pin {} connected {}", peripherals.UICR.pselreset[0].read().pin().bits(), peripherals.UICR.pselreset[0].read().connect().bits());
-    info!("UICR1 is pin {} connected {}", peripherals.UICR.pselreset[1].read().pin().bits(), peripherals.UICR.pselreset[1].read().connect().bits());
+    info!("UICR bit sets {:x} {:x}", UICR.pselreset[0].read().bits(), UICR.pselreset[1].read().bits());
+    info!("UICR0 is pin {} connected {}", UICR.pselreset[0].read().pin().bits(), UICR.pselreset[0].read().connect().bits());
+    info!("UICR1 is pin {} connected {}", UICR.pselreset[1].read().pin().bits(), UICR.pselreset[1].read().connect().bits());
 
 
-    let pins = nrf52832_hal::gpio::p0::Parts::new(peripherals.P0);
-
+    use embassy_nrf::gpio::{Level, Output, OutputDrive};
     // See https://infocenter.nordicsemi.com/topic/ug_nrf52832_dk/UG/nrf52_DK/hw_btns_leds.html
-    let mut led1_pin = pins.p0_17
-        .into_push_pull_output(nrf52832_hal::gpio::Level::High);
-    let mut led2_pin = pins.p0_18
-        .into_push_pull_output(nrf52832_hal::gpio::Level::High);
-    let mut led3_pin = pins.p0_19
-        .into_push_pull_output(nrf52832_hal::gpio::Level::High);
-    let mut led4_pin = pins.p0_20
-        .into_push_pull_output(nrf52832_hal::gpio::Level::High);
+    let mut led1_pin = Output::new(peripherals.P0_17, Level::High, OutputDrive::Standard);
+    let mut led2_pin = Output::new(peripherals.P0_18, Level::High, OutputDrive::Standard);
+    let mut led3_pin = Output::new(peripherals.P0_19, Level::High, OutputDrive::Standard);
+    let mut led4_pin = Output::new(peripherals.P0_20, Level::High, OutputDrive::Standard);
 
     use nrf52832_hal::prelude::OutputPin;
     led1_pin.set_low();
@@ -239,12 +280,34 @@ fn chip_startup() {
     if was_21 {
         led2_pin.set_low();
     }
+
+    // Left in as a template for other interrupt driven components -- but the softdevice wants the
+    // temperature interrupt for its own. See also complaints about how the softdevice handles this
+    // around coap::Temperature.
+    /*
+    use embassy_nrf::interrupt::{self, InterruptExt};
+    let temp_interrupt = interrupt::take!(TEMP);
+    temp_interrupt.set_priority(embassy_nrf::interrupt::Priority::P5);
+    let temperature = embassy_nrf::temp::Temp::new(
+        peripherals.TEMP,
+        temp_interrupt,
+        );
+    */
+
+    ChipParts {
+        leds: blink::LedPins {
+            l1: led1_pin,
+            l2: led2_pin,
+            l3: led3_pin,
+            l4: led4_pin,
+        }
+    }
 }
 
 /// Entry function
 ///
-/// This assembles the configuration, starts up the softdevice, and lets both the softdevice and a
-/// task for Bluetooth event handling run in parallel.
+/// This assembles the configuration, starts up the softdevice, and lets both the softdevice and
+/// other tasks (LED animations, Bluetooth handlers) run in parallel.
 #[entry]
 fn main() -> ! {
     info!("Device is starting up...");
@@ -252,6 +315,7 @@ fn main() -> ! {
     let config = nrf_softdevice::Config {
         conn_gatt: Some(raw::ble_gatt_conn_cfg_t {
             // The minimum is not acceptable in amsuess-core-coap-over-gatt-02
+            // (and the tokens we post are already in the order of 100 bytes long).
             att_mtu: 256,
         }),
         gap_device_name: Some(raw::ble_gap_cfg_device_name_t {
@@ -276,7 +340,7 @@ fn main() -> ! {
         ..Default::default()
     };
 
-    chip_startup();
+    let ChipParts { leds } = chip_startup();
 
     let sd = Softdevice::enable(&config);
 
@@ -285,9 +349,25 @@ fn main() -> ! {
     static SERVER: static_cell::StaticCell<Server> = static_cell::StaticCell::new();
     let server = SERVER.init(unwrap!(Server::new(sd)));
 
+    let sd: &'static Softdevice = sd;
+
+    static LEDS: static_cell::StaticCell<blink::Leds> = static_cell::StaticCell::new();
+    static COAP_HANDLER: static_cell::StaticCell<CoapHandlerMutex> = static_cell::StaticCell::new();
+
     executor.run(move |spawner| {
+        let leds = LEDS.init(blink::Leds::new(spawner, leds));
+        let coap_handler = COAP_HANDLER.init(embassy_sync::mutex::Mutex::new(coap::create_coap_handler(
+                    None,
+                    sd,
+                    leds,
+                    )));
+
         unwrap!(spawner.spawn(softdevice_task(sd)));
-        unwrap!(spawner.spawn(bluetooth_task(sd, server, spawner)));
-        info!("Tasks are active.");
+        unwrap!(spawner.spawn(bluetooth_task(sd, server, spawner, coap_handler)));
+        info!("Device is ready.");
+
+        // Initializing this only late to ensure that nothing of the "regular" things depends on
+        // having a heap; this is only for dcaf / coset as they work with ciborium
+        unsafe { alloc::init() };
     });
 }

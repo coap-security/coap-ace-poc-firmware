@@ -18,7 +18,7 @@ hardware-nrf52dk = []
 debug = 2
 
 [dependencies]
-heapless = "*"
+heapless = "0.7"
 # Providing general entry
 cortex-m-rt = "0.7.0"
 
@@ -28,27 +28,62 @@ defmt-rtt = "0.3.2"
 panic-probe = { version = "0.3", features= ["print-defmt"] }
 
 # Providing an asynchronous runtime needed for the softdevice
-embassy-executor = { version = "0.1.0", features = ["nightly", "defmt"]}
+# For integrated-timers see https://github.com/embassy-rs/embassy/issues/1109
+# (the alternative is generic-queue on embassy-time)
+embassy-executor = { version = "0.1.0", features = ["nightly", "defmt", "integrated-timers"]}
 # ... and helpers to get the 'static Server we need in the runners
 static_cell = "1"
 
+embassy-time = { version = "0.1.0", features = [ "defmt" ] }
+embassy-sync = "0.1.0"
+
+fixed = "1"
+# For accessing fixed internal (as it doesn't export ToInt)
+typenum = "1.15"
+
 # Hardware support
-nrf-softdevice = { version = "0.1.0", features = ["defmt", "nrf52832", "s132", "ble-peripheral", "critical-section-impl", "ble-gatt-server" ] }
+nrf-softdevice = { version = "0.1.0", features = ["defmt", "nrf52832", "s132", "ble-peripheral", "critical-section-impl", "ble-gatt-server", "evt-max-size-512" ] }
 # We could pick 112, that would suffice from the required features, but
 # building on 132 to ensure we can migrate over.
 nrf-softdevice-s132 = "0.1.1"
-
+embassy-nrf = { version = "0.1.0", features = [ "nightly", "defmt", "nrf52832", "gpiote", "time-driver-rtc1" ]}
 # LEDs and buttons, really
 nrf52832-hal = "0.15.1"
 
-# Providing time for defmt output
-embassy-nrf = { version = "0.1.0", features = [ "nightly", "defmt", "nrf52832", "gpiote", "time-driver-rtc1" ]}
+coap-message = "0.2"
+coap-gatt-implementations = { path = "../coap-gatt-implementations/" }
+coap-handler = "0.1"
+# It'd be nice to use ciborium here, but that's not implemented b/c it's not
+# easily no_alloc. Anyway, switching over should only be a matter from moving
+# the handlers from new_minicbor to new_ciborium if the need arises.
+coap-handler-implementations = { version = "0.3.5", features = [ "minicbor" ] }
+coap-numbers = "0.2"
+# The version coap-handler-implementations caters for
+minicbor = "0.15"
+
+# RS
+ace-oscore-helpers = { path = "../ace-oscore-helpers/" }
+dcaf = { version = "^0.3", default-features = false }
+coset = { version = "^0.3", default-features = false }
+
+good_memory_allocator = "0.1.7"
+# Needed to introspect ClaimsSet.rest
+ciborium = { version = "0.2", default-features = false }
 
 [patch.crates-io]
 # None of these are available on crates.io yet
 embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "cea29d7de3169cf2212128e0386e5d57053cc12d" }
 embassy-nrf = { git = "https://github.com/embassy-rs/embassy", rev = "cea29d7de3169cf2212128e0386e5d57053cc12d" }
 embassy-macros = { git = "https://github.com/embassy-rs/embassy", rev = "cea29d7de3169cf2212128e0386e5d57053cc12d" }
+# so we don't have two different conflicting ones around
+embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "cea29d7de3169cf2212128e0386e5d57053cc12d" }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "cea29d7de3169cf2212128e0386e5d57053cc12d" }
 
-nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "74a9526c59c33e28d2dcc7357a9cb5288be58c60" }
-nrf-softdevice-s132 = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "74a9526c59c33e28d2dcc7357a9cb5288be58c60" }
+# Custom branches for https://github.com/embassy-rs/nrf-softdevice/pull/157; commented out revs describe the base version.
+# nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "74a9526c59c33e28d2dcc7357a9cb5288be58c60" }
+nrf-softdevice = { git = "https://github.com/chrysn-pull-requests/nrf-softdevice", branch = "work-with-larger-messages" }
+# nrf-softdevice-s132 = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "74a9526c59c33e28d2dcc7357a9cb5288be58c60" }
+nrf-softdevice-s132 = { git = "https://github.com/chrysn-pull-requests/nrf-softdevice", branch = "work-with-larger-messages" }
+
+coset = { git = "https://github.com/chrysn-pull-requests/coset", branch = "oscore" }
+dcaf = { git = "https://github.com/chrysn-pull-requests/dcaf-rs", branch = "oscore" }
