@@ -70,8 +70,8 @@ The workings -- getting to know the components
   Its setup and operatioins are described on TBD.
 
 
-[firmware's documentation]: https://oscore.gitlab.io/coap-ace-poc-firmware/doc/
-[documented there as well]: https://oscore.gitlab.io/coap-ace-poc-webapp/doc/
+[firmware's documentation]: https://oscore.gitlab.io/coap-ace-poc-firmware/doc/coap_ace_poc_firmware/
+[documented there as well]: https://oscore.gitlab.io/coap-ace-poc-webapp/doc/coap_ace_poc_webapp/
 
 License
 -------
