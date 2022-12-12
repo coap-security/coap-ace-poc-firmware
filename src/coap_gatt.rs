@@ -8,6 +8,9 @@
 //! draft-amsuess-core-coap-over-gatt-02 (which does not support role reversal, and would need
 //! parallel connections on parallel characteristics to implement concurrent or longer-running
 //! requests).
+//!
+//! The module's simplicity is also due to all the message parsing being delegated to the
+//! [coap_gatt_utils] module. In fact, this module might move in there over time.
 
 /// State held inside a single connection
 ///
@@ -44,19 +47,19 @@ where
     /// Call this whenever a BLE write arrives. The response value is what any BLE read should
     /// henceforth produce.
     pub fn write(&mut self, written: &[u8]) -> heapless::Vec<u8, 200> {
-        let mut request = coap_gatt_implementations::parse(written).unwrap();
+        let mut request = coap_gatt_utils::parse(written).unwrap();
 
         let handler = (self.accessor)();
 
         if let Some(mut handler) = handler {
             let extracted = handler.extract_request_data(&request);
 
-            coap_gatt_implementations::write(
+            coap_gatt_utils::write(
                 |response| handler.build_response(response, extracted)
                 )
         } else {
             use coap_message::MinimalWritableMessage;
-            coap_gatt_implementations::write(
+            coap_gatt_utils::write(
                 |response| {
                     response.set_code(coap_numbers::code::SERVICE_UNAVAILABLE);
                     response.add_option_uint(coap_numbers::option::MAX_AGE, 0u8);
