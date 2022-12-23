@@ -67,6 +67,8 @@ mod blink;
 mod devicetime;
 mod alloc;
 
+use core::ops::DerefMut;
+
 use defmt_rtt as _;
 use embassy_nrf as _;
 use panic_probe as _;
@@ -76,6 +78,8 @@ use defmt::{info, warn, error, unwrap};
 use embassy_executor::{Executor, Spawner};
 use nrf_softdevice::ble::{gatt_server, peripheral};
 use nrf_softdevice::{raw, Softdevice};
+
+use ace_oscore_helpers::resourceserver::ResourceServer;
 
 static EXECUTOR: static_cell::StaticCell<Executor> = static_cell::StaticCell::new();
 
@@ -107,11 +111,13 @@ async fn softdevice_task(sd: &'static Softdevice) {
 // let coap_gatt_us: Uuid = "8df804b7-3300-496d-9dfa-f8fb40a236bc".parse().unwrap();
 // let coap_gatt_uc: Uuid = "2a58fc3f-3c62-4ecc-8167-d66d4d9410c2".parse().unwrap();
 
+// 700 exceeds some internal limits, but 400 is plenty for our a-bit-over-200 byte tokens.
+const MAX_MESSAGE_LEN: usize = 400;
+
 #[nrf_softdevice::gatt_service(uuid = "8df804b7-3300-496d-9dfa-f8fb40a236bc")]
 struct CoAPGattService {
     #[characteristic(uuid = "2a58fc3f-3c62-4ecc-8167-d66d4d9410c2", read, write, indicate)]
-    // 700 doesn't work, 400 gets at least past startup, but let's start with unproblematic values
-    message: heapless::Vec<u8, 200>,
+    message: heapless::Vec<u8, MAX_MESSAGE_LEN>,
 }
 
 // The only GATT attribute we're offering is the CoAP endpoint.
@@ -120,7 +126,25 @@ struct Server {
     coap: CoAPGattService,
 }
 
-type CoapHandlerMutex = embassy_sync::mutex::Mutex<embassy_sync::blocking_mutex::raw::NoopRawMutex, coap::CoapHandler>;
+type RsMutex = embassy_sync::mutex::Mutex<embassy_sync::blocking_mutex::raw::NoopRawMutex, ResourceServer<rs_configuration::ApplicationClaims>>;
+type Rs = embassy_sync::mutex::Mutex<embassy_sync::blocking_mutex::raw::NoopRawMutex, ResourceServer<crate::rs_configuration::ApplicationClaims>>;
+// runs into an ICE which I couldn't minify yet
+// type CoapHandlerFactory = impl Fn(Option<crate::rs_configuration::ApplicationClaims>, &'static Rs) -> coap::CoapHandler + 'static;
+pub struct CoapHandlerFactory {
+    leds: &'static blink::Leds,
+    sd: &'static Softdevice,
+}
+
+impl CoapHandlerFactory {
+    pub fn build(&self, claims: Option<&crate::rs_configuration::ApplicationClaims>, rs: &'static Rs) -> coap::CoapHandler {
+        coap::create_coap_handler(
+                    claims,
+                    self.sd,
+                    self.leds,
+                    rs,
+                    )
+    }
+}
 
 /// Single Bluetooth connection handler
 ///
@@ -128,18 +152,18 @@ type CoapHandlerMutex = embassy_sync::mutex::Mutex<embassy_sync::blocking_mutex:
 /// disconnection.
 // Careful: pool_size must match MAX_CONNECTIONS
 #[embassy_executor::task(pool_size=2)]
-async fn blueworker(server: &'static Server, conn: nrf_softdevice::ble::Connection, coap_handler: &'static CoapHandlerMutex) {
-    let mut cg = coap_gatt::Connection::new(|| coap_handler.try_lock().ok());
+async fn blueworker(server: &'static Server, conn: nrf_softdevice::ble::Connection, chf: &'static CoapHandlerFactory, rs: &'static Rs) {
+    let mut cg = coap_gatt::Connection::new(chf, rs);
 
     info!("Running new BLE connection");
     gatt_server::run(&conn, server, |e| match e {
         ServerEvent::Coap(e) => match e {
-            CoAPGattServiceEvent::MessageWrite(m) => {
-                let response = cg.write(&*m);
+            CoAPGattServiceEvent::MessageWrite(mut m) => {
+                let response = cg.write(&mut *m);
 
                 info!("Setting response {:?}", response);
 
-                unwrap!(server.coap.message_set(response));
+                unwrap!(server.coap.message_set(&response));
             },
             CoAPGattServiceEvent::MessageCccdWrite { indications: ind } => {
                 // Indications are currently specified but not implemented
@@ -164,7 +188,7 @@ async fn blueworker(server: &'static Server, conn: nrf_softdevice::ble::Connecti
 /// It alternates between sending connectable advertisements (when connectable) and unconnectable
 /// advertisements (while the pool of connections is exhausted).
 #[embassy_executor::task]
-async fn bluetooth_task(sd: &'static Softdevice, server: &'static Server, spawner: Spawner, coap_handler: &'static CoapHandlerMutex) {
+async fn bluetooth_task(sd: &'static Softdevice, server: &'static Server, spawner: Spawner, chf: &'static CoapHandlerFactory, rs: &'static Rs) {
     #[rustfmt::skip]
     let adv_data = &[
         // length, type, value; types see Generic Access Profile
@@ -214,7 +238,7 @@ async fn bluetooth_task(sd: &'static Softdevice, server: &'static Server, spawne
             }
         };
 
-        if let Err(_) = spawner.spawn(blueworker(server, conn, coap_handler)) {
+        if let Err(_) = spawner.spawn(blueworker(server, conn, chf, rs)) {
             // Counting should make sure this never happens, but it's a bit racy.
             warn!("Spawn failure, dropping conn right away");
             USED_CONNECTIONS.fetch_sub(1, core::sync::atomic::Ordering::SeqCst);
@@ -312,6 +336,8 @@ fn chip_startup() -> ChipParts {
 fn main() -> ! {
     info!("Device is starting up...");
 
+    log_to_defmt::setup();
+
     let config = nrf_softdevice::Config {
         conn_gatt: Some(raw::ble_gatt_conn_cfg_t {
             // The minimum is not acceptable in amsuess-core-coap-over-gatt-02
@@ -352,22 +378,100 @@ fn main() -> ! {
     let sd: &'static Softdevice = sd;
 
     static LEDS: static_cell::StaticCell<blink::Leds> = static_cell::StaticCell::new();
-    static COAP_HANDLER: static_cell::StaticCell<CoapHandlerMutex> = static_cell::StaticCell::new();
+    static RS: static_cell::StaticCell<RsMutex> = static_cell::StaticCell::new();
+    static COAP_HANDLER_FACTORY: static_cell::StaticCell<CoapHandlerFactory> = static_cell::StaticCell::new();
+
+    use ace_oscore_helpers::{aead, aes};
+    let rs_as_association = ace_oscore_helpers::resourceserver::RsAsSharedData {
+        issuer: Some("AS"),
+        audience: Some("rs1"),
+        key: aead::generic_array::arr![u8; 'a' as u8, 'b' as u8, 'c' as u8, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32],
+    };
+
+    let rs = RS.init(embassy_sync::mutex::Mutex::new(ResourceServer::new_with_association(rs_as_association)));
 
     executor.run(move |spawner| {
-        let leds = LEDS.init(blink::Leds::new(spawner, leds));
-        let coap_handler = COAP_HANDLER.init(embassy_sync::mutex::Mutex::new(coap::create_coap_handler(
-                    None,
-                    sd,
-                    leds,
-                    )));
+        let leds: &'static blink::Leds = LEDS.init(blink::Leds::new(spawner, leds));
+
+        let coap_handler_factory = COAP_HANDLER_FACTORY.init(CoapHandlerFactory { sd, leds });
 
         unwrap!(spawner.spawn(softdevice_task(sd)));
-        unwrap!(spawner.spawn(bluetooth_task(sd, server, spawner, coap_handler)));
+        unwrap!(spawner.spawn(bluetooth_task(sd, server, spawner, coap_handler_factory, rs)));
         info!("Device is ready.");
 
         // Initializing this only late to ensure that nothing of the "regular" things depends on
         // having a heap; this is only for dcaf / coset as they work with ciborium
         unsafe { alloc::init() };
+
+        // Of course they go *after* alloc init: they're based on heap CoAP messages :-)
+        unwrap!(do_oscore_test());
+        info!("OSCORE tests passed");
     });
+}
+
+/// Run a piece of the libOSCORE plug test suite.
+pub fn do_oscore_test() -> Result<(), &'static str> {
+    use core::mem::MaybeUninit;
+
+    use coap_message::{ReadableMessage, MinimalWritableMessage, MessageOption};
+
+    use liboscore::raw;
+
+    // From OSCORE plug test, security context A
+    let immutables = liboscore::PrimitiveImmutables::derive(
+        liboscore::HkdfAlg::from_number(5).unwrap(),
+        b"\x9e\x7c\xa9\x22\x23\x78\x63\x40",
+        b"\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10",
+        None,
+        liboscore::AeadAlg::from_number(24).unwrap(),
+        b"\x01",
+        b"",
+        ).unwrap();
+
+    let mut primitive = liboscore::PrimitiveContext::new_from_fresh_material(immutables);
+
+    let mut msg = coap_message::heapmessage::HeapMessage::new();
+    let oscopt = b"\x09\x00";
+    msg.add_option(9, oscopt);
+    msg.set_payload(b"\x5c\x94\xc1\x29\x80\xfd\x93\x68\x4f\x37\x1e\xb2\xf5\x25\xa2\x69\x3b\x47\x4d\x5e\x37\x16\x45\x67\x63\x74\xe6\x8d\x4c\x20\x4a\xdb");
+
+    liboscore_msgbackend::with_heapmessage_as_msg_native(msg, |msg| {
+        unsafe {
+            let header = liboscore::OscoreOption::parse(oscopt).unwrap();
+
+            let mut unprotected = MaybeUninit::uninit();
+            let mut request_id = MaybeUninit::uninit();
+            let ret = raw::oscore_unprotect_request(msg, unprotected.as_mut_ptr(), &mut header.into_inner(), primitive.as_mut(), request_id.as_mut_ptr());
+            assert!(ret == raw::oscore_unprotect_request_result_OSCORE_UNPROTECT_REQUEST_OK);
+            let unprotected = unprotected.assume_init();
+
+            let unprotected = liboscore::ProtectedMessage::new(unprotected);
+            assert!(unprotected.code() == 1);
+
+            let mut message_options = unprotected.options().fuse();
+            let mut ref_options = [(11, "oscore"), (11, "hello"), (11, "1")].into_iter().fuse();
+            for (msg_o, ref_o) in (&mut message_options).zip(&mut ref_options) {
+                assert!(msg_o.number() == ref_o.0);
+                assert!(msg_o.value() == ref_o.1.as_bytes());
+            }
+            assert!(message_options.next().is_none(), "Message contained extra options");
+            assert!(ref_options.next().is_none(), "Message didn't contain the reference options");
+            assert!(unprotected.payload() == b"");
+        };
+    });
+
+    // We've taken a *mut of it, let's make sure it lives to the end
+    drop(primitive);
+
+    Ok(())
+}
+
+#[no_mangle]
+unsafe extern "C" fn abort() {
+    defmt::panic!("C abort called");
+}
+
+#[no_mangle]
+unsafe extern "C" fn __assert_func() {
+    defmt::panic!("C assert called");
 }

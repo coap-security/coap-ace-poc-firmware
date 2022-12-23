@@ -62,13 +62,20 @@ coap-numbers = "0.2"
 minicbor = "0.15"
 
 # RS
-ace-oscore-helpers = { git = "https://gitlab.com/oscore/ace-oscore-helpers/" }
+ace-oscore-helpers = { git = "https://gitlab.com/oscore/ace-oscore-helpers/", features = [ "liboscore" ] }
 dcaf = { version = "^0.3", default-features = false }
 coset = { version = "^0.3", default-features = false }
 
 good_memory_allocator = "0.1.7"
 # Needed to introspect ClaimsSet.rest
 ciborium = { version = "0.2", default-features = false }
+
+liboscore = { git = "https://gitlab.com/oscore/liboscore/", branch = "rust-backends" }
+liboscore-msgbackend = { git = "https://gitlab.com/oscore/liboscore/", branch = "rust-backends", features = [ "alloc" ] }
+# only to enable the feature
+# liboscore-cryptobackend = { git = "https://gitlab.com/oscore/liboscore/", branch = "rust-backends", features = [ "log_cryptographic_operations_including_secret_keys" ] }
+# just for the above
+log-to-defmt = "0.1.0"
 
 [patch.crates-io]
 # None of these are available on crates.io yet
@@ -79,11 +86,8 @@ embassy-macros = { git = "https://github.com/embassy-rs/embassy", rev = "cea29d7
 embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "cea29d7de3169cf2212128e0386e5d57053cc12d" }
 embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "cea29d7de3169cf2212128e0386e5d57053cc12d" }
 
-# Custom branches for https://github.com/embassy-rs/nrf-softdevice/pull/157; commented out revs describe the base version.
-# nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "74a9526c59c33e28d2dcc7357a9cb5288be58c60" }
-nrf-softdevice = { git = "https://github.com/chrysn-pull-requests/nrf-softdevice", branch = "work-with-larger-messages" }
-# nrf-softdevice-s132 = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "74a9526c59c33e28d2dcc7357a9cb5288be58c60" }
-nrf-softdevice-s132 = { git = "https://github.com/chrysn-pull-requests/nrf-softdevice", branch = "work-with-larger-messages" }
+nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "8a3dbb7f2975c145b9c3bde792eed03e89254e07" }
+nrf-softdevice-s132 = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "8a3dbb7f2975c145b9c3bde792eed03e89254e07" }
 
 coset = { git = "https://github.com/chrysn-pull-requests/coset", branch = "oscore" }
 dcaf = { git = "https://github.com/chrysn-pull-requests/dcaf-rs", branch = "oscore" }

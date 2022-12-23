@@ -1,8 +1,10 @@
 //! CoAP handlers for the demo application
 //!
 //! This modules's main entry point is [create_coap_handler], which produces a full handler with
-//! the resources `/time`, `/authz-info`, `/leds`, `/temp` and `/identify`, all backed by structs
-//! of this module.
+//! the resources `/time`, `/leds`, `/temp` and `/identify`, all backed by structs of this module,
+//! and `/authz-info`, backed by a resource server.
+
+use ace_oscore_helpers::resourceserver::ResourceServer;
 
 pub type CoapHandler = impl coap_handler::Handler;
 
@@ -31,76 +33,6 @@ impl coap_handler_implementations::SimpleCBORHandler for Time {
     fn put(&mut self, representation: &Self::Put) -> u8 {
         crate::devicetime::set_unixtime(*representation);
         coap_numbers::code::CHANGED
-    }
-}
-
-/// Resource handler representing the ACE-OSCORE profile (RFC9203) `/authz-info` endpoint,
-/// accepting tokens together with id1 and nonce1 values.
-struct AuthzInfo;
-
-impl coap_handler::Handler for AuthzInfo {
-    // FIXME: actual response
-    type RequestData = u8;
-
-    fn extract_request_data(&mut self, request: &impl coap_message::ReadableMessage) -> u8 {
-        defmt::info!("Request to authz-info");
-
-        use coap_numbers::code::*;
-        use coap_handler_implementations::option_processing::OptionsExt;
-        if request.code().into() != POST {
-            return METHOD_NOT_ALLOWED;
-        }
-        if request.options().ignore_elective_others().is_err() {
-            return BAD_OPTION;
-        }
-
-        // FIXME: also id1, nonce1 in a structure
-        let access_token = request.payload();
-
-        // FIXME: *This* is where we need alloc
-
-        use coset::TaggedCborSerializable;
-        let envelope = match coset::CoseEncrypt0::from_tagged_slice(&access_token) {
-            Ok(e) => e,
-            _ => {
-                defmt::error!("Request contained undecodable envelope");
-                return BAD_REQUEST;
-            }
-        };
-        let iv = envelope.unprotected.iv;
-        use ace_oscore_helpers::{aead, aes};
-        // FIXME: Defer to the RS's AS associations
-        let mut cipher: ace_oscore_helpers::aesccm::RustCryptoCcmCoseCipher::<aes::Aes256,  aead::generic_array::typenum::U16, aead::generic_array::typenum::U13> = ace_oscore_helpers::aesccm::RustCryptoCcmCoseCipher::new(
-            aead::generic_array::arr![u8; 'a' as u8, 'b' as u8, 'c' as u8, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32],
-            *aead::generic_array::GenericArray::from_slice(&iv),
-            );
-        let claims = match dcaf::decrypt_access_token(&access_token[1..].to_vec(), &mut cipher, Some(&[])) {
-            Ok(c) => c,
-            _ => {
-                defmt::error!("Request contained undecodable envelope");
-                return BAD_REQUEST;
-            }
-        };
-        let application_claims = crate::rs_configuration::ApplicationClaims::process_token(&claims);
-        let oscore_material = match ace_oscore_helpers::oscore_claims::extract_oscore(claims) {
-            Ok(o) => o,
-            _ => {
-                defmt::error!("No usable OSCORE material found");
-                // FIXME check error code
-                return BAD_REQUEST;
-            }
-        };
-        defmt::info!("{:?}", application_claims);
-        defmt::info!("{:?}", oscore_material.ms.as_ref().map(|m| m.as_slice()));
-
-        CHANGED
-    }
-    fn estimate_length(&mut self, _: &u8) -> usize {
-        1
-    }
-    fn build_response(&mut self, response: &mut impl coap_message::MutableWritableMessage, code: u8) {
-        response.set_code(code.try_into().map_err(|_| ()).unwrap());
-        response.set_payload(b"");
     }
 }
 
@@ -139,6 +71,7 @@ impl coap_handler_implementations::SimpleCBORHandler for Temperature {
     type Post = ();
 
     fn get(&mut self) -> Result<Self::Get, u8> {
+        defmt::info!("Reading temperature");
         // Note that this blocks for 50ms according to the docs. If softdevice let us use it as
         // normal in embassy_nrf, we might handle that smarter. (Although coap-handler is not
         // helpful there yet anyway).
@@ -198,14 +131,51 @@ impl coap_handler::Handler for Identify {
     }
 }
 
+/// Resource handler that is decided at the time the handler is built
+pub enum Either<A, B> {
+    A(A),
+    B(B),
+}
+
+impl<A, B> coap_handler::Handler for Either<A, B>
+where
+    A: coap_handler::Handler,
+    B: coap_handler::Handler,
+{
+    // Could be untagged, but that'd require unsafe code
+    type RequestData = Either<A::RequestData, B::RequestData>;
+
+    fn extract_request_data(&mut self, request: &impl coap_message::ReadableMessage) -> Self::RequestData {
+        match self {
+            Either::A(inner) => Either::A(inner.extract_request_data(request)),
+            Either::B(inner) => Either::B(inner.extract_request_data(request)),
+        }
+    }
+    fn estimate_length(&mut self, data: &Self::RequestData) -> usize {
+        match (self, data) {
+            (Either::A(inner), Either::A(data)) => inner.estimate_length(data),
+            (Either::B(inner), Either::B(data)) => inner.estimate_length(data),
+            _ => panic!("Handler content can't change between request extraction and response building"), // and users aren't expected to meddle with extracted data either
+        }
+    }
+    fn build_response(&mut self, response: &mut impl coap_message::MutableWritableMessage, data: Self::RequestData) {
+        match (self, data) {
+            (Either::A(inner), Either::A(data)) => inner.build_response(response, data),
+            (Either::B(inner), Either::B(data)) => inner.build_response(response, data),
+            _ => panic!("Handler content can't change between request extraction and response building"), // and users aren't expected to meddle with extracted data either
+        }
+    }
+}
+
 /// Create a tree of CoAP resource as described in this module's documentation out of the
 /// individual handler implementations in this module.
 ///
 /// The tree also features a `/.well-known/core` resource listing the other resources.
 pub fn create_coap_handler(
-        claims: Option<crate::rs_configuration::ApplicationClaims>,
+        claims: Option<&crate::rs_configuration::ApplicationClaims>,
         softdevice: &'static nrf_softdevice::Softdevice,
         leds: &'static crate::blink::Leds,
+        rs: &'static crate::Rs,
     ) -> CoapHandler
 {
     use coap_handler_implementations::ReportingHandlerBuilder;
@@ -216,16 +186,30 @@ pub fn create_coap_handler(
     // improved MutableWritableMessage, or better bounds on CBOR serialization size)
     let time_handler = coap_handler_implementations::SimpleWrapper::new_minicbor(Time);
 
-    let authzinfo_handler = coap_handler_implementations::wkc::ConstantSingleRecordReport::new(AuthzInfo, &[coap_handler_implementations::wkc::Attribute::ResourceType("ace.ai")]);
+    let authzinfo_handler = ace_oscore_helpers::resourceserver::UnprotectedAuthzInfoEndpoint::new(|| rs.try_lock().ok());
+    // FIXME should be provided by UnprotectedAuthzInfoEndpoint
+    let authzinfo_handler = coap_handler_implementations::wkc::ConstantSingleRecordReport::new(authzinfo_handler, &[coap_handler_implementations::wkc::Attribute::ResourceType("ace.ai")]);
 
-    let temperature_handler = coap_handler_implementations::SimpleWrapper::new_minicbor(Temperature { softdevice });
-    let leds_handler = coap_handler_implementations::SimpleWrapper::new_minicbor(Leds(leds));
-    let identify_handler = coap_handler_implementations::wkc::ConstantSingleRecordReport::new(Identify(leds), &[]);
+    let temperature_handler;
+    let leds_handler;
+    let identify_handler;
+
+    if let Some(_) = claims {
+        temperature_handler = Either::A(coap_handler_implementations::SimpleWrapper::new_minicbor(Temperature { softdevice }));
+        leds_handler = Either::A(coap_handler_implementations::SimpleWrapper::new_minicbor(Leds(leds)));
+        identify_handler = Either::A(Identify(leds));
+    } else {
+        // FIXME: 4.01 with payload
+        temperature_handler = Either::B(coap_handler_implementations::NeverFound {});
+        leds_handler = Either::B(coap_handler_implementations::NeverFound {});
+        identify_handler = Either::B(coap_handler_implementations::NeverFound {});
+    }
 
     // Why isn't SimpleWrapper Reporting?
     let time_handler = coap_handler_implementations::wkc::ConstantSingleRecordReport::new(time_handler, &[coap_handler_implementations::wkc::Attribute::Ct(60)]);
     let temperature_handler = coap_handler_implementations::wkc::ConstantSingleRecordReport::new(temperature_handler, &[coap_handler_implementations::wkc::Attribute::Ct(60)]);
     let leds_handler = coap_handler_implementations::wkc::ConstantSingleRecordReport::new(leds_handler, &[coap_handler_implementations::wkc::Attribute::Ct(60)]);
+    let identify_handler = coap_handler_implementations::wkc::ConstantSingleRecordReport::new(identify_handler, &[]);
 
     coap_handler_implementations::new_dispatcher()
             // Fully unprotected in the demo only

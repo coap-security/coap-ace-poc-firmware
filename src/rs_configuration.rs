@@ -20,13 +20,15 @@ pub enum ApplicationClaims {
 #[derive(defmt::Format)]
 pub struct UnrecognizedCredentials;
 
-impl ApplicationClaims {
+impl<'a> TryFrom<&'a coset::cwt::ClaimsSet> for ApplicationClaims {
+    type Error = UnrecognizedCredentials;
+
     /// Digest a claims set into the properties relevant to the application.
     ///
     /// Before calling this, it needs to be verified that the claims set was decrypted from (and
     /// claimed to be) the AS relevant to this system, and for the audience that represents this
     /// system. That is typically done right after decryption.
-    pub fn process_token(claims: &coset::cwt::ClaimsSet) -> Result<Self, UnrecognizedCredentials> {
+    fn try_from(claims: &coset::cwt::ClaimsSet) -> Result<Self, UnrecognizedCredentials> {
         // Verify that the token applies to us.
 
         let mut scope = None;
