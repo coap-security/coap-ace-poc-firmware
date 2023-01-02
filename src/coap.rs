@@ -216,23 +216,27 @@ pub fn create_coap_handler(
         )],
     );
 
-    let temperature_handler;
-    let leds_handler;
-    let identify_handler;
+    // FIXME: 4.01 with payload
+    let mut temperature_handler = Either::B(coap_handler_implementations::NeverFound {});
+    let mut leds_handler = Either::B(coap_handler_implementations::NeverFound {});
+    let mut identify_handler = Either::B(coap_handler_implementations::NeverFound {});
 
-    if let Some(_) = claims {
+    if matches!(claims, Some(_)) {
+        // Either Junior or Senior may use these
         temperature_handler = Either::A(coap_handler_implementations::SimpleWrapper::new_minicbor(
             Temperature { softdevice },
         ));
+        identify_handler = Either::A(Identify(leds));
+    }
+
+    if matches!(
+        claims,
+        Some(crate::rs_configuration::ApplicationClaims::Senior)
+    ) {
+        // Only Senior may write that
         leds_handler = Either::A(coap_handler_implementations::SimpleWrapper::new_minicbor(
             Leds(leds),
         ));
-        identify_handler = Either::A(Identify(leds));
-    } else {
-        // FIXME: 4.01 with payload
-        temperature_handler = Either::B(coap_handler_implementations::NeverFound {});
-        leds_handler = Either::B(coap_handler_implementations::NeverFound {});
-        identify_handler = Either::B(coap_handler_implementations::NeverFound {});
     }
 
     // Why isn't SimpleWrapper Reporting?
