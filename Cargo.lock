@@ -15,7 +15,7 @@ dependencies = [
 [[package]]
 name = "ace-oscore-helpers"
 version = "0.1.0"
-source = "git+https://gitlab.com/oscore/ace-oscore-helpers/#73bd6ae3757c677fca5499dfe3bbca51c356aa5e"
+source = "git+https://gitlab.com/oscore/ace-oscore-helpers/#ef1baacd77a35397fa11d5f5e813b17be381421d"
 dependencies = [
  "aead",
  "aes",

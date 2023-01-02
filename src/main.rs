@@ -126,13 +126,14 @@ struct Server {
     coap: CoAPGattService,
 }
 
+type RandomClosure = impl FnMut(&mut [u8]);
 type RsMutex = embassy_sync::mutex::Mutex<
     embassy_sync::blocking_mutex::raw::NoopRawMutex,
-    ResourceServer<rs_configuration::ApplicationClaims>,
+    ResourceServer<rs_configuration::ApplicationClaims, RandomClosure>,
 >;
 type Rs = embassy_sync::mutex::Mutex<
     embassy_sync::blocking_mutex::raw::NoopRawMutex,
-    ResourceServer<crate::rs_configuration::ApplicationClaims>,
+    ResourceServer<crate::rs_configuration::ApplicationClaims, RandomClosure>,
 >;
 // runs into an ICE which I couldn't minify yet
 // type CoapHandlerFactory = impl Fn(Option<crate::rs_configuration::ApplicationClaims>, &'static Rs) -> coap::CoapHandler + 'static;
@@ -444,7 +445,11 @@ fn main() -> ! {
     };
 
     let rs = RS.init(embassy_sync::mutex::Mutex::new(
-        ResourceServer::new_with_association(rs_as_association),
+        ResourceServer::new_with_association_and_randomness(rs_as_association, move |buf| {
+            // We can afford unwrapping here because the BLE exchanges to get here produce a nice
+            // amount of entropy already
+            unwrap!(nrf_softdevice::random_bytes(&sd, buf))
+        }),
     ));
 
     executor.run(move |spawner| {
