@@ -33,11 +33,7 @@ pub struct LedPins {
 }
 
 impl Leds {
-    pub fn new(
-        spawner: embassy_executor::Spawner,
-        pins: LedPins,
-        ) -> Self
-    {
+    pub fn new(spawner: embassy_executor::Spawner, pins: LedPins) -> Self {
         Self {
             spawner,
             pins: Cell::new(Some(pins)),

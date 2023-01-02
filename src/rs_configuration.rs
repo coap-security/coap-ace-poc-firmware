@@ -34,7 +34,11 @@ impl<'a> TryFrom<&'a coset::cwt::ClaimsSet> for ApplicationClaims {
         let mut scope = None;
         for (key, value) in claims.rest.iter() {
             match (key, value) {
-                (coset::RegisteredLabelWithPrivate::Assigned(coset::iana::CwtClaimName::Scope), ciborium::value::Value::Text(s)) => { // FIXME value
+                (
+                    coset::RegisteredLabelWithPrivate::Assigned(coset::iana::CwtClaimName::Scope),
+                    ciborium::value::Value::Text(s),
+                ) => {
+                    // FIXME value
                     let new = match s.as_str() {
                         "r_temp" => ApplicationClaims::Junior,
                         _ => return Err(UnrecognizedCredentials),

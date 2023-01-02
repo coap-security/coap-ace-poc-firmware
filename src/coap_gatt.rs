@@ -14,9 +14,9 @@
 
 use core::ops::Deref;
 
-use coap_handler::Handler;
-use coap_message::{ReadableMessage, MinimalWritableMessage};
 use ace_oscore_helpers::resourceserver::ResourceServer;
+use coap_handler::Handler;
+use coap_message::{MinimalWritableMessage, ReadableMessage};
 
 /// State held inside a single connection
 ///
@@ -49,8 +49,7 @@ use ace_oscore_helpers::resourceserver::ResourceServer;
 /// Bluetooth connection, or a CoAP request on a different transport altogether), it's OK for it to
 /// return None: Requests arriving during that time will just receive a 5.03 Service Unavailable
 /// response, and clients are free to retry immediately.
-pub struct Connection
-{
+pub struct Connection {
     /// A factory for a CoAP handler
     chf: &'static crate::CoapHandlerFactory,
     /// An accessor to a ResourceServer
@@ -58,8 +57,7 @@ pub struct Connection
 }
 
 // This will do more once a future version of CoAP-over-GATT is used
-impl Connection
-{
+impl Connection {
     pub fn new(chf: &'static crate::CoapHandlerFactory, rs: &'static crate::Rs) -> Self {
         Self { chf, rs }
     }
@@ -72,22 +70,30 @@ impl Connection
     pub fn write(&mut self, written: &mut [u8]) -> heapless::Vec<u8, { crate::MAX_MESSAGE_LEN }> {
         let mut request = coap_gatt_utils::parse_mut(written).unwrap();
 
-        use coap_message::{ReadableMessage, MessageOption};
+        use coap_message::{MessageOption, ReadableMessage};
         // FIXME: We need to copy things out because ReadableMessage by design only hands out
         // short-lived values (so they can be built in the iterator if need be)
-        let mut oscore_option: Option<heapless::Vec::<u8, 16>> = None;
+        let mut oscore_option: Option<heapless::Vec<u8, 16>> = None;
         for o in request.options() {
             if o.number() == coap_numbers::option::OSCORE {
-                oscore_option = o.value().try_into()
-                    .map_err(|e| {defmt::error!("OSCORE option is too long"); e})
+                oscore_option = o
+                    .value()
+                    .try_into()
+                    .map_err(|e| {
+                        defmt::error!("OSCORE option is too long");
+                        e
+                    })
                     .ok();
                 break;
             }
         }
         let oscore_option = match &oscore_option {
             Some(o) => liboscore::OscoreOption::parse(&o)
-                            .map_err(|e| {defmt::error!("OSCORE option found but parsing failed"); e})
-                            .ok(),
+                .map_err(|e| {
+                    defmt::error!("OSCORE option found but parsing failed");
+                    e
+                })
+                .ok(),
             None => None,
         };
 
@@ -95,8 +101,11 @@ impl Connection
             // Look it up, lock RS, or 5.03
             if let Some(mut rs) = self.rs.try_lock().ok() {
                 if let Some((context, app_claims)) = rs.look_up_context(&oscore_option) {
-
-                    defmt::info!("OSCORE option indicated KID {:?}, found key with claims {:?}", oscore_option.kid(), &app_claims);
+                    defmt::info!(
+                        "OSCORE option indicated KID {:?}, found key with claims {:?}",
+                        oscore_option.kid(),
+                        &app_claims
+                    );
 
                     // The self.rs will actually be locked, because we hold it through `rs` which
                     // goes into the &mut OSCORE context. An advanced version that supports token
@@ -114,30 +123,26 @@ impl Connection
 
                     defmt::info!("OSCORE request processed, building response...");
 
-                    coap_gatt_utils::write(
-                        |response|
-                            liboscore::protect_response(
-                                response,
-                                context,
-                                &mut correlation,
-                                |response|
-                                    handler.build_response(response, extracted)
-                            )
+                    coap_gatt_utils::write(|response| {
+                        liboscore::protect_response(
+                            response,
+                            context,
+                            &mut correlation,
+                            |response| handler.build_response(response, extracted),
                         )
+                    })
                 } else {
-                    coap_gatt_utils::write(
-                        |response| {
-                            response.set_code(coap_numbers::code::UNAUTHORIZED);
-                            // Could set payload "Security context not found"
-                        })
+                    coap_gatt_utils::write(|response| {
+                        response.set_code(coap_numbers::code::UNAUTHORIZED);
+                        // Could set payload "Security context not found"
+                    })
                 }
             } else {
                 // OSCORE request but the context is busy
-                coap_gatt_utils::write(
-                    |response| {
-                        response.set_code(coap_numbers::code::SERVICE_UNAVAILABLE);
-                        response.add_option_uint(coap_numbers::option::MAX_AGE, 0u8);
-                    })
+                coap_gatt_utils::write(|response| {
+                    response.set_code(coap_numbers::code::SERVICE_UNAVAILABLE);
+                    response.add_option_uint(coap_numbers::option::MAX_AGE, 0u8);
+                })
             }
         } else {
             // Unprotected requests never have credentials
@@ -145,10 +150,7 @@ impl Connection
 
             let extracted = handler.extract_request_data(&request);
 
-            coap_gatt_utils::write(
-                |response| handler.build_response(response, extracted)
-                )
+            coap_gatt_utils::write(|response| handler.build_response(response, extracted))
         }
     }
 }
-

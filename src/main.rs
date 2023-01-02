@@ -59,13 +59,13 @@
 #![feature(type_alias_impl_trait)]
 #![feature(alloc_error_handler)]
 
-mod rs_configuration;
 mod coap_gatt;
+mod rs_configuration;
 
-mod coap;
-mod blink;
-mod devicetime;
 mod alloc;
+mod blink;
+mod coap;
+mod devicetime;
 
 use core::ops::DerefMut;
 
@@ -74,7 +74,7 @@ use embassy_nrf as _;
 use panic_probe as _;
 
 use cortex_m_rt::entry;
-use defmt::{info, warn, error, unwrap};
+use defmt::{error, info, unwrap, warn};
 use embassy_executor::{Executor, Spawner};
 use nrf_softdevice::ble::{gatt_server, peripheral};
 use nrf_softdevice::{raw, Softdevice};
@@ -126,8 +126,14 @@ struct Server {
     coap: CoAPGattService,
 }
 
-type RsMutex = embassy_sync::mutex::Mutex<embassy_sync::blocking_mutex::raw::NoopRawMutex, ResourceServer<rs_configuration::ApplicationClaims>>;
-type Rs = embassy_sync::mutex::Mutex<embassy_sync::blocking_mutex::raw::NoopRawMutex, ResourceServer<crate::rs_configuration::ApplicationClaims>>;
+type RsMutex = embassy_sync::mutex::Mutex<
+    embassy_sync::blocking_mutex::raw::NoopRawMutex,
+    ResourceServer<rs_configuration::ApplicationClaims>,
+>;
+type Rs = embassy_sync::mutex::Mutex<
+    embassy_sync::blocking_mutex::raw::NoopRawMutex,
+    ResourceServer<crate::rs_configuration::ApplicationClaims>,
+>;
 // runs into an ICE which I couldn't minify yet
 // type CoapHandlerFactory = impl Fn(Option<crate::rs_configuration::ApplicationClaims>, &'static Rs) -> coap::CoapHandler + 'static;
 pub struct CoapHandlerFactory {
@@ -136,13 +142,12 @@ pub struct CoapHandlerFactory {
 }
 
 impl CoapHandlerFactory {
-    pub fn build(&self, claims: Option<&crate::rs_configuration::ApplicationClaims>, rs: &'static Rs) -> coap::CoapHandler {
-        coap::create_coap_handler(
-                    claims,
-                    self.sd,
-                    self.leds,
-                    rs,
-                    )
+    pub fn build(
+        &self,
+        claims: Option<&crate::rs_configuration::ApplicationClaims>,
+        rs: &'static Rs,
+    ) -> coap::CoapHandler {
+        coap::create_coap_handler(claims, self.sd, self.leds, rs)
     }
 }
 
@@ -151,8 +156,13 @@ impl CoapHandlerFactory {
 /// This is spawned from [bluetooth_task] once a connection arrives, and terminates at
 /// disconnection.
 // Careful: pool_size must match MAX_CONNECTIONS
-#[embassy_executor::task(pool_size=2)]
-async fn blueworker(server: &'static Server, conn: nrf_softdevice::ble::Connection, chf: &'static CoapHandlerFactory, rs: &'static Rs) {
+#[embassy_executor::task(pool_size = 2)]
+async fn blueworker(
+    server: &'static Server,
+    conn: nrf_softdevice::ble::Connection,
+    chf: &'static CoapHandlerFactory,
+    rs: &'static Rs,
+) {
     let mut cg = coap_gatt::Connection::new(chf, rs);
 
     info!("Running new BLE connection");
@@ -164,7 +174,7 @@ async fn blueworker(server: &'static Server, conn: nrf_softdevice::ble::Connecti
                 info!("Setting response {:?}", response);
 
                 unwrap!(server.coap.message_set(&response));
-            },
+            }
             CoAPGattServiceEvent::MessageCccdWrite { indications: ind } => {
                 // Indications are currently specified but not implemented
                 info!("Indications: {}", ind);
@@ -188,7 +198,13 @@ async fn blueworker(server: &'static Server, conn: nrf_softdevice::ble::Connecti
 /// It alternates between sending connectable advertisements (when connectable) and unconnectable
 /// advertisements (while the pool of connections is exhausted).
 #[embassy_executor::task]
-async fn bluetooth_task(sd: &'static Softdevice, server: &'static Server, spawner: Spawner, chf: &'static CoapHandlerFactory, rs: &'static Rs) {
+async fn bluetooth_task(
+    sd: &'static Softdevice,
+    server: &'static Server,
+    spawner: Spawner,
+    chf: &'static CoapHandlerFactory,
+    rs: &'static Rs,
+) {
     #[rustfmt::skip]
     let adv_data = &[
         // length, type, value; types see Generic Access Profile
@@ -216,17 +232,28 @@ async fn bluetooth_task(sd: &'static Softdevice, server: &'static Server, spawne
         while USED_CONNECTIONS.load(core::sync::atomic::Ordering::SeqCst) >= MAX_CONNECTIONS {
             info!("Connections full; advertising unconnectable");
             // FIXME: Does this need to contain different info?
-            let adv = peripheral::NonconnectableAdvertisement::ScannableUndirected { adv_data, scan_data };
-            let nonconn = peripheral::advertise(sd, adv, &peripheral::Config {
-                // We can't easily cancel a running advertisement, so if we're at the connection limit,
-                // we just terminate occasionally to check if there's a free slot now.
-                timeout: Some(500 /* x 10ms = 5s */),
-                ..Default::default()
-            }).await;
+            let adv = peripheral::NonconnectableAdvertisement::ScannableUndirected {
+                adv_data,
+                scan_data,
+            };
+            let nonconn = peripheral::advertise(
+                sd,
+                adv,
+                &peripheral::Config {
+                    // We can't easily cancel a running advertisement, so if we're at the connection limit,
+                    // we just terminate occasionally to check if there's a free slot now.
+                    timeout: Some(500 /* x 10ms = 5s */),
+                    ..Default::default()
+                },
+            )
+            .await;
         }
 
         info!("Advertising as connectable until a connection is establsihed");
-        let adv = peripheral::ConnectableAdvertisement::ScannableUndirected { adv_data, scan_data };
+        let adv = peripheral::ConnectableAdvertisement::ScannableUndirected {
+            adv_data,
+            scan_data,
+        };
         USED_CONNECTIONS.fetch_add(1, core::sync::atomic::Ordering::SeqCst);
         let conn = peripheral::advertise_connectable(sd, adv, &peripheral::Config::default()).await;
 
@@ -276,9 +303,21 @@ fn chip_startup() -> ChipParts {
 
     let was_21 = UICR.pselreset[0].read().pin().bits() == 21;
 
-    info!("UICR bit sets {:x} {:x}", UICR.pselreset[0].read().bits(), UICR.pselreset[1].read().bits());
-    info!("UICR0 is pin {} connected {}", UICR.pselreset[0].read().pin().bits(), UICR.pselreset[0].read().connect().bits());
-    info!("UICR1 is pin {} connected {}", UICR.pselreset[1].read().pin().bits(), UICR.pselreset[1].read().connect().bits());
+    info!(
+        "UICR bit sets {:x} {:x}",
+        UICR.pselreset[0].read().bits(),
+        UICR.pselreset[1].read().bits()
+    );
+    info!(
+        "UICR0 is pin {} connected {}",
+        UICR.pselreset[0].read().pin().bits(),
+        UICR.pselreset[0].read().connect().bits()
+    );
+    info!(
+        "UICR1 is pin {} connected {}",
+        UICR.pselreset[1].read().pin().bits(),
+        UICR.pselreset[1].read().connect().bits()
+    );
 
     let mut nvmc = bare_peripherals.NVMC;
     nvmc.config.write(|w| w.wen().wen());
@@ -286,10 +325,21 @@ fn chip_startup() -> ChipParts {
     UICR.pselreset[1].write(|w| unsafe { w.pin().bits(21).connect().connected() });
     nvmc.config.reset();
 
-    info!("UICR bit sets {:x} {:x}", UICR.pselreset[0].read().bits(), UICR.pselreset[1].read().bits());
-    info!("UICR0 is pin {} connected {}", UICR.pselreset[0].read().pin().bits(), UICR.pselreset[0].read().connect().bits());
-    info!("UICR1 is pin {} connected {}", UICR.pselreset[1].read().pin().bits(), UICR.pselreset[1].read().connect().bits());
-
+    info!(
+        "UICR bit sets {:x} {:x}",
+        UICR.pselreset[0].read().bits(),
+        UICR.pselreset[1].read().bits()
+    );
+    info!(
+        "UICR0 is pin {} connected {}",
+        UICR.pselreset[0].read().pin().bits(),
+        UICR.pselreset[0].read().connect().bits()
+    );
+    info!(
+        "UICR1 is pin {} connected {}",
+        UICR.pselreset[1].read().pin().bits(),
+        UICR.pselreset[1].read().connect().bits()
+    );
 
     use embassy_nrf::gpio::{Level, Output, OutputDrive};
     // See https://infocenter.nordicsemi.com/topic/ug_nrf52832_dk/UG/nrf52_DK/hw_btns_leds.html
@@ -324,7 +374,7 @@ fn chip_startup() -> ChipParts {
             l2: led2_pin,
             l3: led3_pin,
             l4: led4_pin,
-        }
+        },
     }
 }
 
@@ -348,9 +398,13 @@ fn main() -> ! {
             p_value: b"CoAP-ACE demo #9876" as *const u8 as _,
             current_len: 19,
             max_len: 19,
-            write_perm: nrf_softdevice_s132::ble_gap_conn_sec_mode_t { _bitfield_1: raw::ble_gap_conn_sec_mode_t::new_bitfield_1(0, 0) },
+            write_perm: nrf_softdevice_s132::ble_gap_conn_sec_mode_t {
+                _bitfield_1: raw::ble_gap_conn_sec_mode_t::new_bitfield_1(0, 0),
+            },
             // No writes allowed or planned, so we can just take the const pointer.
-            _bitfield_1: raw::ble_gap_cfg_device_name_t::new_bitfield_1(raw::BLE_GATTS_VLOC_USER as u8),
+            _bitfield_1: raw::ble_gap_cfg_device_name_t::new_bitfield_1(
+                raw::BLE_GATTS_VLOC_USER as u8,
+            ),
         }),
         conn_gap: Some(raw::ble_gap_conn_cfg_t {
             conn_count: MAX_CONNECTIONS,
@@ -379,7 +433,8 @@ fn main() -> ! {
 
     static LEDS: static_cell::StaticCell<blink::Leds> = static_cell::StaticCell::new();
     static RS: static_cell::StaticCell<RsMutex> = static_cell::StaticCell::new();
-    static COAP_HANDLER_FACTORY: static_cell::StaticCell<CoapHandlerFactory> = static_cell::StaticCell::new();
+    static COAP_HANDLER_FACTORY: static_cell::StaticCell<CoapHandlerFactory> =
+        static_cell::StaticCell::new();
 
     use ace_oscore_helpers::{aead, aes};
     let rs_as_association = ace_oscore_helpers::resourceserver::RsAsSharedData {
@@ -388,7 +443,9 @@ fn main() -> ! {
         key: aead::generic_array::arr![u8; 'a' as u8, 'b' as u8, 'c' as u8, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32],
     };
 
-    let rs = RS.init(embassy_sync::mutex::Mutex::new(ResourceServer::new_with_association(rs_as_association)));
+    let rs = RS.init(embassy_sync::mutex::Mutex::new(
+        ResourceServer::new_with_association(rs_as_association),
+    ));
 
     executor.run(move |spawner| {
         let leds: &'static blink::Leds = LEDS.init(blink::Leds::new(spawner, leds));
@@ -396,7 +453,13 @@ fn main() -> ! {
         let coap_handler_factory = COAP_HANDLER_FACTORY.init(CoapHandlerFactory { sd, leds });
 
         unwrap!(spawner.spawn(softdevice_task(sd)));
-        unwrap!(spawner.spawn(bluetooth_task(sd, server, spawner, coap_handler_factory, rs)));
+        unwrap!(spawner.spawn(bluetooth_task(
+            sd,
+            server,
+            spawner,
+            coap_handler_factory,
+            rs
+        )));
         info!("Device is ready.");
 
         // Initializing this only late to ensure that nothing of the "regular" things depends on
@@ -413,7 +476,7 @@ fn main() -> ! {
 pub fn do_oscore_test() -> Result<(), &'static str> {
     use core::mem::MaybeUninit;
 
-    use coap_message::{ReadableMessage, MinimalWritableMessage, MessageOption};
+    use coap_message::{MessageOption, MinimalWritableMessage, ReadableMessage};
 
     use liboscore::raw;
 
@@ -426,7 +489,8 @@ pub fn do_oscore_test() -> Result<(), &'static str> {
         liboscore::AeadAlg::from_number(24).unwrap(),
         b"\x01",
         b"",
-        ).unwrap();
+    )
+    .unwrap();
 
     let mut primitive = liboscore::PrimitiveContext::new_from_fresh_material(immutables);
 
@@ -441,7 +505,13 @@ pub fn do_oscore_test() -> Result<(), &'static str> {
 
             let mut unprotected = MaybeUninit::uninit();
             let mut request_id = MaybeUninit::uninit();
-            let ret = raw::oscore_unprotect_request(msg, unprotected.as_mut_ptr(), &mut header.into_inner(), primitive.as_mut(), request_id.as_mut_ptr());
+            let ret = raw::oscore_unprotect_request(
+                msg,
+                unprotected.as_mut_ptr(),
+                &mut header.into_inner(),
+                primitive.as_mut(),
+                request_id.as_mut_ptr(),
+            );
             assert!(ret == raw::oscore_unprotect_request_result_OSCORE_UNPROTECT_REQUEST_OK);
             let unprotected = unprotected.assume_init();
 
@@ -449,13 +519,21 @@ pub fn do_oscore_test() -> Result<(), &'static str> {
             assert!(unprotected.code() == 1);
 
             let mut message_options = unprotected.options().fuse();
-            let mut ref_options = [(11, "oscore"), (11, "hello"), (11, "1")].into_iter().fuse();
+            let mut ref_options = [(11, "oscore"), (11, "hello"), (11, "1")]
+                .into_iter()
+                .fuse();
             for (msg_o, ref_o) in (&mut message_options).zip(&mut ref_options) {
                 assert!(msg_o.number() == ref_o.0);
                 assert!(msg_o.value() == ref_o.1.as_bytes());
             }
-            assert!(message_options.next().is_none(), "Message contained extra options");
-            assert!(ref_options.next().is_none(), "Message didn't contain the reference options");
+            assert!(
+                message_options.next().is_none(),
+                "Message contained extra options"
+            );
+            assert!(
+                ref_options.next().is_none(),
+                "Message didn't contain the reference options"
+            );
             assert!(unprotected.payload() == b"");
         };
     });
