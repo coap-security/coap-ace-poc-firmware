@@ -1,8 +1,8 @@
 pages:
-  image: rustdocker/rust:nightly
+  image: docker.io/rustdocker/rust:nightly
   script:
     - rustup target add thumbv7em-none-eabihf --toolchain nightly
-    - apt-get update && apt-get install -y wget unzip srecord
+    - apt-get update && apt-get install -y wget unzip srecord libclang-dev gcc-arm-none-eabi
     - sh -x ./build-hexfile.sh
     - mkdir public
     - |
