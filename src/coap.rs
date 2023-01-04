@@ -186,6 +186,58 @@ where
     }
 }
 
+/// A handler that sends 4.01 (Unauthorized) and AS Request Creation Hints unconditionally. It only
+/// encodes the audience and AS, no scope or other hints.
+struct UnauthorizedSeeAS(&'static crate::Rs);
+
+impl coap_handler::Handler for UnauthorizedSeeAS {
+    type RequestData = ();
+
+    fn extract_request_data(
+        &mut self,
+        _: &impl coap_message::ReadableMessage,
+    ) -> Self::RequestData {
+        // We already know all we need
+    }
+    fn estimate_length(&mut self, data: &Self::RequestData) -> usize {
+        150
+    }
+    fn build_response(
+        &mut self,
+        response: &mut impl coap_message::MutableWritableMessage,
+        _data: Self::RequestData,
+    ) {
+        if let Ok(rs) = self.0.try_lock() {
+            response.set_code(coap_numbers::code::UNAUTHORIZED.try_into().ok().unwrap());
+            response.add_option_uint(
+                coap_numbers::option::CONTENT_FORMAT
+                    .try_into()
+                    .ok()
+                    .unwrap(),
+                19u8, /* application/ace+cbor */
+            );
+            let payload = response.payload_mut_with_len(140);
+            let mut writer = windowed_infinity::WindowedInfinity::new(payload, 0);
+            let mut encoder = ciborium_ll::Encoder::from(&mut writer);
+
+            let rqh = rs.request_creation_hints();
+            rqh.push_to_encoder(&mut encoder)
+                .expect("Writing to a WindowedInfinity can not fail");
+
+            let written = writer.get_cursor() as _;
+            response.truncate(written);
+        } else {
+            response.set_code(
+                coap_numbers::code::SERVICE_UNAVAILABLE
+                    .try_into()
+                    .ok()
+                    .unwrap(),
+            );
+            response.set_payload(b"");
+        }
+    }
+}
+
 /// Create a tree of CoAP resource as described in this module's documentation out of the
 /// individual handler implementations in this module.
 ///
@@ -216,10 +268,9 @@ pub fn create_coap_handler(
         )],
     );
 
-    // FIXME: 4.01 with payload
-    let mut temperature_handler = Either::B(coap_handler_implementations::NeverFound {});
-    let mut leds_handler = Either::B(coap_handler_implementations::NeverFound {});
-    let mut identify_handler = Either::B(coap_handler_implementations::NeverFound {});
+    let mut temperature_handler = Either::B(UnauthorizedSeeAS(&rs));
+    let mut leds_handler = Either::B(UnauthorizedSeeAS(&rs));
+    let mut identify_handler = Either::B(UnauthorizedSeeAS(&rs));
 
     if matches!(claims, Some(_)) {
         // Either Junior or Senior may use these

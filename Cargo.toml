@@ -77,6 +77,10 @@ liboscore-msgbackend = { git = "https://gitlab.com/oscore/liboscore/", branch = 
 # just for the above
 log-to-defmt = "0.1.0"
 
+# for rendering the 4.01
+windowed-infinity = { version = "0.1.2", features = [ "with_ciborium" ] }
+ciborium-ll = { version = "0.2", default-features = false }
+
 [patch.crates-io]
 # None of these are available on crates.io yet
 embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "cea29d7de3169cf2212128e0386e5d57053cc12d" }

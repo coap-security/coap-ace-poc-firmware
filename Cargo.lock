@@ -15,7 +15,7 @@ dependencies = [
 [[package]]
 name = "ace-oscore-helpers"
 version = "0.1.0"
-source = "git+https://gitlab.com/oscore/ace-oscore-helpers/#ef1baacd77a35397fa11d5f5e813b17be381421d"
+source = "git+https://gitlab.com/oscore/ace-oscore-helpers/#d34259e95437a03321bb1e7312bbeb01f36cbf4c"
 dependencies = [
  "aead",
  "aes",
@@ -382,6 +382,7 @@ version = "0.1.0"
 dependencies = [
  "ace-oscore-helpers",
  "ciborium",
+ "ciborium-ll",
  "coap-gatt-utils",
  "coap-handler",
  "coap-handler-implementations",
@@ -409,6 +410,7 @@ dependencies = [
  "panic-probe",
  "static_cell",
  "typenum",
+ "windowed-infinity",
 ]
 
 [[package]]
@@ -2042,10 +2044,11 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "windowed-infinity"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc308bececff904824bdc5a8aefe9f1e82e7ba00485685c7c1231685fa6989be"
+checksum = "e4c89fb8bc3dc33aaffd4bf63652c4fa1f9d4d4eafd94800f774a6416df1f4fc"
 dependencies = [
+ "ciborium-io",
  "serde",
  "serde_cbor",
 ]
