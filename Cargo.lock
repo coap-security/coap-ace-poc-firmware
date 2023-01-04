@@ -400,6 +400,7 @@ dependencies = [
  "fixed",
  "good_memory_allocator",
  "heapless 0.7.16",
+ "hex",
  "liboscore",
  "liboscore-msgbackend",
  "log-to-defmt",
@@ -408,6 +409,8 @@ dependencies = [
  "nrf-softdevice-s132",
  "nrf52832-hal",
  "panic-probe",
+ "serde",
+ "serde_yaml",
  "static_cell",
  "typenum",
  "windowed-infinity",
@@ -1194,6 +1197,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "hex"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
 name = "hex-literal"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1813,6 +1822,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_yaml"
+version = "0.9.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92b5b431e8907b50339b51223b97d102db8d987ced36f6e4d03621db9316c834"
+dependencies = [
+ "indexmap",
+ "itoa",
+ "ryu",
+ "serde",
+ "unsafe-libyaml",
+]
+
+[[package]]
 name = "sha2"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1966,6 +1988,12 @@ dependencies = [
  "crypto-common",
  "subtle",
 ]
+
+[[package]]
+name = "unsafe-libyaml"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc7ed8ba44ca06be78ea1ad2c3682a43349126c8818054231ee6f4748012aed2"
 
 [[package]]
 name = "uuid"

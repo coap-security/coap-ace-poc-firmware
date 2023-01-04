@@ -81,6 +81,11 @@ log-to-defmt = "0.1.0"
 windowed-infinity = { version = "0.1.2", features = [ "with_ciborium" ] }
 ciborium-ll = { version = "0.2", default-features = false }
 
+[build-dependencies]
+serde = "1"
+serde_yaml = "0.9.16"
+hex = "0.4"
+
 [patch.crates-io]
 # None of these are available on crates.io yet
 embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "cea29d7de3169cf2212128e0386e5d57053cc12d" }

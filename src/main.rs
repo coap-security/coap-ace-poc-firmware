@@ -54,6 +54,14 @@
 //! Once the firmware is flashed, it will start whenever the device is powered.
 //!
 //! [S132 softdevice]: https://www.nordicsemi.com/Products/Development-software/s132/
+//!
+//! ## Device identity
+//!
+//! By default, `./demo_as_association.yaml` is used to configure the AS to use, and contains a key
+//! shared between the device and its corresponding AS. When using multiple devices, they should
+//! all be provisioned with individual identities (i.e. different audience values and individual
+//! keys). The file to be used for a particular build can be passed in through the
+//! `RS_AS_ASSOCIATION` environment variable.
 #![no_std]
 #![no_main]
 #![feature(type_alias_impl_trait)]
@@ -438,12 +446,7 @@ fn main() -> ! {
         static_cell::StaticCell::new();
 
     use ace_oscore_helpers::{aead, aes};
-    let rs_as_association = ace_oscore_helpers::resourceserver::RsAsSharedData {
-        issuer: Some("AS"),
-        audience: "rs1",
-        as_uri: "https://as.coap.amsuess.com/token",
-        key: aead::generic_array::arr![u8; 'a' as u8, 'b' as u8, 'c' as u8, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32],
-    };
+    let rs_as_association = include!(concat!(env!("OUT_DIR"), "/rs_as_association.rs"));
 
     let rs = RS.init(embassy_sync::mutex::Mutex::new(
         ResourceServer::new_with_association_and_randomness(rs_as_association, move |buf| {
