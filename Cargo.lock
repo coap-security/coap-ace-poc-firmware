@@ -15,7 +15,7 @@ dependencies = [
 [[package]]
 name = "ace-oscore-helpers"
 version = "0.1.0"
-source = "git+https://gitlab.com/oscore/ace-oscore-helpers/#d34259e95437a03321bb1e7312bbeb01f36cbf4c"
+source = "git+https://gitlab.com/oscore/ace-oscore-helpers/#a7712c5243c2514b0efddfb54778e6bd8d4028d6"
 dependencies = [
  "aead",
  "aes",
@@ -397,8 +397,8 @@ dependencies = [
  "embassy-nrf",
  "embassy-sync",
  "embassy-time",
+ "embedded-alloc",
  "fixed",
- "good_memory_allocator",
  "heapless 0.7.16",
  "hex",
  "liboscore",
@@ -888,6 +888,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "embedded-alloc"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8931e47e33c5d3194fbcf9cc82df0919193bd2fa40008f388eb1d28fd9c9ea6b"
+dependencies = [
+ "critical-section 1.1.1",
+ "linked_list_allocator",
+]
+
+[[package]]
 name = "embedded-dma"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1105,16 +1115,6 @@ name = "glob"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
-
-[[package]]
-name = "good_memory_allocator"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1651659e016ea4259760966432aebcc96c81e26743fb018c59585ddd677127e"
-dependencies = [
- "either",
- "spin",
-]
 
 [[package]]
 name = "half"
@@ -1335,6 +1335,12 @@ dependencies = [
  "coap-message",
  "coap-message-utils",
 ]
+
+[[package]]
+name = "linked_list_allocator"
+version = "0.10.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e322f259d225fbae43a1b053b2dc6a5968a6bdf8b205f5de684dab485b95030e"
 
 [[package]]
 name = "lock_api"
