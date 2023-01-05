@@ -36,14 +36,18 @@ impl<'a> TryFrom<&'a coset::cwt::ClaimsSet> for ApplicationClaims {
             match (key, value) {
                 (
                     coset::RegisteredLabelWithPrivate::Assigned(coset::iana::CwtClaimName::Scope),
-                    ciborium::value::Value::Text(s),
+                    ciborium::value::Value::Bytes(s),
                 ) => {
-                    // FIXME value
-                    let new = match s.as_str() {
-                        "r_temp" => ApplicationClaims::Junior,
+                    // FIXME value goes back and forth between J/S and AIF
+                    let new = match s.as_slice() {
+                        b"\x83\x82e/temp\x00\x82i/identify\x01\x82e/leds\x02" => {
+                            ApplicationClaims::Senior
+                        }
+                        b"\x82\x82e/temp\x00\x82i/identify\x01" => ApplicationClaims::Junior,
                         _ => return Err(UnrecognizedCredentials),
                     };
                     if scope.replace(new).is_some() {
+                        // Double key
                         return Err(UnrecognizedCredentials);
                     }
                 }
