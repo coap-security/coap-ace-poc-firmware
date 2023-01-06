@@ -114,22 +114,39 @@ impl Connection {
                     // which something new can be added.
                     let mut handler = self.chf.build(Some(app_claims), &mut self.rs);
 
-                    let (mut correlation, extracted) = liboscore::unprotect_request(
+                    let Ok((mut correlation, extracted)) = liboscore::unprotect_request(
                         &mut request,
                         oscore_option,
                         context,
                         |request| handler.extract_request_data(request),
-                    );
+                    ) else {
+                        defmt::error!("OSCORE request could not be unprotected");
+
+                        return coap_gatt_utils::write(|response| {
+                            response.set_code(coap_numbers::code::BAD_REQUEST);
+                            // Could also set "Decryption failed"
+                            response.set_payload(b"");
+                        });
+                    };
 
                     defmt::info!("OSCORE request processed, building response...");
 
                     coap_gatt_utils::write(|response| {
-                        liboscore::protect_response(
+                        if liboscore::protect_response(
                             response,
                             context,
                             &mut correlation,
                             |response| handler.build_response(response, extracted),
-                        )
+                        ).is_err() {
+                            // Practically, this means we're either out of sequence numbers (which
+                            // was caught in the preparatory phase, and we can err out), or
+                            // something in the crypto step went wrong (the only thing that comes
+                            // to mind is too long AAD, which can't practically happen), and then
+                            // we're producing an erroneous message at best (at worst the backend
+                            // panics) because we already wrote options and payload.
+                            response.set_code(coap_numbers::code::INTERNAL_SERVER_ERROR);
+                            response.set_payload(b"");
+                        }
                     })
                 } else {
                     coap_gatt_utils::write(|response| {
