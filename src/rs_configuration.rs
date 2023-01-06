@@ -10,7 +10,31 @@
 /// protocol: These are stored inside the RS's token pool, and already processed there.
 // FIXME switch to AIF
 #[derive(defmt::Format)]
-pub enum ApplicationClaims {
+pub struct ApplicationClaims {
+    pub role: Role,
+    pub exp: u32,
+}
+
+impl ApplicationClaims {
+    pub fn valid(&self) -> bool {
+        let now = crate::devicetime::unixtime();
+        if let Ok(now) = now {
+            if self.exp >= now {
+                defmt::info!("Token is good for another {} seconds", self.exp - now);
+                true
+            } else {
+                defmt::info!("Token has expired for {} seconds", now - self.exp);
+            }
+        } else {
+            // It's highly unlikely that the current time is inaccessible, but in that
+            // case, let's assume it's expired
+            false
+        }
+    }
+}
+
+#[derive(defmt::Format)]
+pub enum Role {
     Junior,
     Senior,
 }
@@ -32,6 +56,10 @@ impl<'a> TryFrom<&'a coset::cwt::ClaimsSet> for ApplicationClaims {
         // Verify that the token applies to us.
 
         let mut scope = None;
+        let mut exp = match claims.expiration_time {
+            Some(coset::cwt::Timestamp::WholeSeconds(n)) => n.try_into().ok(),
+            _ => None,
+        };
         for (key, value) in claims.rest.iter() {
             match (key, value) {
                 (
@@ -40,10 +68,8 @@ impl<'a> TryFrom<&'a coset::cwt::ClaimsSet> for ApplicationClaims {
                 ) => {
                     // FIXME value goes back and forth between J/S and AIF
                     let new = match s.as_slice() {
-                        b"\x83\x82e/temp\x00\x82i/identify\x01\x82e/leds\x02" => {
-                            ApplicationClaims::Senior
-                        }
-                        b"\x82\x82e/temp\x00\x82i/identify\x01" => ApplicationClaims::Junior,
+                        b"\x83\x82e/temp\x00\x82i/identify\x01\x82e/leds\x02" => Role::Senior,
+                        b"\x82\x82e/temp\x00\x82i/identify\x01" => Role::Junior,
                         _ => return Err(UnrecognizedCredentials),
                     };
                     if scope.replace(new).is_some() {
@@ -55,9 +81,21 @@ impl<'a> TryFrom<&'a coset::cwt::ClaimsSet> for ApplicationClaims {
             }
         }
 
-        match scope {
-            Some(s) => Ok(s),
-            None => Err(UnrecognizedCredentials),
+        let Some(scope) = scope else {
+            return Err(UnrecognizedCredentials);
+        };
+
+        let Some(exp) = exp else {
+            // Let's not even get started with infinite credentials
+            return Err(UnrecognizedCredentials);
+        };
+
+        let appclaims = ApplicationClaims { role: scope, exp };
+
+        if !appclaims.valid() {
+            return Err(UnrecognizedCredentials);
         }
+
+        Ok(appclaims)
     }
 }

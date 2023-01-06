@@ -100,7 +100,14 @@ impl Connection {
         if let Some(oscore_option) = oscore_option {
             // Look it up, lock RS, or 5.03
             if let Some(mut rs) = self.rs.try_lock().ok() {
-                if let Some((context, app_claims)) = rs.look_up_context(&oscore_option) {
+                let mut context_app_claims = rs.look_up_context(&oscore_option);
+
+                if context_app_claims.as_ref().map(|(_, ac)| ac.valid()) == Some(false) {
+                    // Not removing them from the RS: they'll age out anyway
+                    context_app_claims = None;
+                }
+
+                if let Some((context, app_claims)) = context_app_claims {
                     defmt::info!(
                         "OSCORE option indicated KID {:?}, found key with claims {:?}",
                         oscore_option.kid(),
@@ -137,7 +144,9 @@ impl Connection {
                             context,
                             &mut correlation,
                             |response| handler.build_response(response, extracted),
-                        ).is_err() {
+                        )
+                        .is_err()
+                        {
                             // Practically, this means we're either out of sequence numbers (which
                             // was caught in the preparatory phase, and we can err out), or
                             // something in the crypto step went wrong (the only thing that comes

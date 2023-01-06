@@ -282,7 +282,10 @@ pub fn create_coap_handler(
 
     if matches!(
         claims,
-        Some(crate::rs_configuration::ApplicationClaims::Senior)
+        Some(crate::rs_configuration::ApplicationClaims {
+            role: crate::rs_configuration::Role::Senior,
+            ..
+        })
     ) {
         // Only Senior may write that
         leds_handler = Either::A(coap_handler_implementations::SimpleWrapper::new_minicbor(
