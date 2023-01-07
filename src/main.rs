@@ -40,6 +40,14 @@
 //!     flashed firmware and/or the debugger. Run `nrf-recover` to unlock it; this erases all data
 //!     on the target device.
 //!
+//! * Restore operation of the reset pin after the `nrf-recover` wipe:
+//!
+//!   ```shell
+//!   $ cat uicr_reset_pin21.hex | grep -v '//' | probe-rs-cli download --chip nrf52832_xxAA --format hex /dev/stdin
+//!   ```
+//!
+//!   (where the grep is a workaround for probe-rs not accepting comments in ihex files<!-- https://github.com/martinmroz/ihex/issues/16#issuecomment-1374406055 -->).
+//!
 //! * Run
 //!
 //!   ```shell
@@ -287,10 +295,7 @@ struct ChipParts {
     leds: blink::LedPins,
 }
 
-/// Initialize chip peripherals, in particular LEDs.
-///
-/// In parallel, this fixes the UICR state (see also ./uicr_reset_pin21.hex and associated
-/// commentary), and indicates that things were fixed in the initial LED status.
+/// Initialize chip peripherals, in particular clocks, interrupts and LEDs.
 ///
 /// It returns all (possibly post-processed) peripherals that are needed later.
 fn chip_startup() -> ChipParts {
@@ -308,47 +313,6 @@ fn chip_startup() -> ChipParts {
     //
     // Preferably those should be forwarded by embassy_nrf
     let bare_peripherals = unwrap!(nrf52832_hal::pac::Peripherals::take());
-    let UICR = bare_peripherals.UICR;
-
-    let was_21 = UICR.pselreset[0].read().pin().bits() == 21;
-
-    info!(
-        "UICR bit sets {:x} {:x}",
-        UICR.pselreset[0].read().bits(),
-        UICR.pselreset[1].read().bits()
-    );
-    info!(
-        "UICR0 is pin {} connected {}",
-        UICR.pselreset[0].read().pin().bits(),
-        UICR.pselreset[0].read().connect().bits()
-    );
-    info!(
-        "UICR1 is pin {} connected {}",
-        UICR.pselreset[1].read().pin().bits(),
-        UICR.pselreset[1].read().connect().bits()
-    );
-
-    let mut nvmc = bare_peripherals.NVMC;
-    nvmc.config.write(|w| w.wen().wen());
-    UICR.pselreset[0].write(|w| unsafe { w.pin().bits(21).connect().connected() });
-    UICR.pselreset[1].write(|w| unsafe { w.pin().bits(21).connect().connected() });
-    nvmc.config.reset();
-
-    info!(
-        "UICR bit sets {:x} {:x}",
-        UICR.pselreset[0].read().bits(),
-        UICR.pselreset[1].read().bits()
-    );
-    info!(
-        "UICR0 is pin {} connected {}",
-        UICR.pselreset[0].read().pin().bits(),
-        UICR.pselreset[0].read().connect().bits()
-    );
-    info!(
-        "UICR1 is pin {} connected {}",
-        UICR.pselreset[1].read().pin().bits(),
-        UICR.pselreset[1].read().connect().bits()
-    );
 
     use embassy_nrf::gpio::{Level, Output, OutputDrive};
     // See https://infocenter.nordicsemi.com/topic/ug_nrf52832_dk/UG/nrf52_DK/hw_btns_leds.html
@@ -360,9 +324,6 @@ fn chip_startup() -> ChipParts {
     use nrf52832_hal::prelude::OutputPin;
     led1_pin.set_low();
     led4_pin.set_low();
-    if was_21 {
-        led2_pin.set_low();
-    }
 
     // Left in as a template for other interrupt driven components -- but the softdevice wants the
     // temperature interrupt for its own. See also complaints about how the softdevice handles this
