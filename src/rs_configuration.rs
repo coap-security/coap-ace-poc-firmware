@@ -24,6 +24,7 @@ impl ApplicationClaims {
                 true
             } else {
                 defmt::info!("Token has expired for {} seconds", now - self.exp);
+                false
             }
         } else {
             // It's highly unlikely that the current time is inaccessible, but in that
