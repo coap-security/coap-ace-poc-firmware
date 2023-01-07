@@ -40,7 +40,7 @@ pages:
       EOF
     - mv images public/
 
-    - cargo +nightly doc
+    - cargo +nightly doc --no-deps
     - mv target/thumbv7em-none-eabihf/doc public/doc
   artifacts:
     paths:
