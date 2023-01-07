@@ -216,6 +216,7 @@ async fn blueworker(
 async fn bluetooth_task(
     sd: &'static Softdevice,
     server: &'static Server,
+    scan_data: &'static [u8],
     spawner: Spawner,
     chf: &'static CoapHandlerFactory,
     rs: &'static Rs,
@@ -232,15 +233,6 @@ async fn bluetooth_task(
         0x02, 0x01, raw::BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE as u8,
         // AD structure 2: Appearance: generic thermometer
         0x03, 0x19, 0x00, 0x03,
-    ];
-    #[rustfmt::skip]
-    let scan_data = &[
-        // AD structure 3: Shortened local name
-        0x09, 0x08, b'C', b'o', b'A', b'P', b'-', b'A', b'C', b'E',
-        // AD structure: Incomplete list of 128-bit Service Class UUIDs -- beware the endianness
-        // (we could also send a complete one, not-sure/not-care at this stage)
-        // Data from coap_gatt_us (but we build this literally right now, so meh)
-        0x11, 0x06, 0xbc, 0x36, 0xa2, 0x40, 0xfb, 0xf8, 0xfa, 0x9d, 0x6d, 0x49, 0x00, 0x33, 0xb7, 0x04, 0xf8, 0x8d,
     ];
 
     loop {
@@ -353,6 +345,43 @@ fn main() -> ! {
 
     log_to_defmt::setup();
 
+    use ace_oscore_helpers::aead;
+    let rs_as_association = include!(concat!(env!("OUT_DIR"), "/rs_as_association.rs"));
+
+    let mut full_name = heapless::String::<20>::new();
+    full_name.push_str("CoAP-ACE demo #").unwrap();
+    full_name.push_str(&rs_as_association.audience).unwrap();
+    let full_name = full_name.into_bytes();
+    let full_name_len: u16 = full_name.len().try_into().unwrap();
+
+    #[rustfmt::skip]
+    static SCAN_DATA: static_cell::StaticCell<heapless::Vec::<u8, 28>> = static_cell::StaticCell::new();
+    let scan_data = SCAN_DATA.init({
+        let mut scan_data = heapless::Vec::<u8, 28>::new();
+        scan_data
+            .push(
+                (1 + 5 + rs_as_association.audience.len())
+                    .try_into()
+                    .unwrap(),
+            )
+            .unwrap();
+        scan_data.push(0x08).unwrap();
+        scan_data.extend_from_slice(b"CoAP ").unwrap();
+        scan_data
+            .extend_from_slice(rs_as_association.audience.as_bytes())
+            .unwrap();
+        scan_data
+            .extend_from_slice(&[
+                // AD structure: Incomplete list of 128-bit Service Class UUIDs -- beware the endianness
+                // (we could also send a complete one, not-sure/not-care at this stage)
+                // Data from coap_gatt_us (but we build this literally right now, so meh)
+                0x11, 0x06, 0xbc, 0x36, 0xa2, 0x40, 0xfb, 0xf8, 0xfa, 0x9d, 0x6d, 0x49, 0x00, 0x33,
+                0xb7, 0x04, 0xf8, 0x8d,
+            ])
+            .unwrap();
+        scan_data
+    });
+
     let config = nrf_softdevice::Config {
         conn_gatt: Some(raw::ble_gatt_conn_cfg_t {
             // The minimum is not acceptable in amsuess-core-coap-over-gatt-02
@@ -360,9 +389,10 @@ fn main() -> ! {
             att_mtu: 256,
         }),
         gap_device_name: Some(raw::ble_gap_cfg_device_name_t {
-            p_value: b"CoAP-ACE demo #9876" as *const u8 as _,
-            current_len: 19,
-            max_len: 19,
+            // It needs a mut ptr, but we don't allow writing in the permissions
+            p_value: full_name.as_ptr() as *mut u8,
+            current_len: full_name_len,
+            max_len: full_name_len,
             write_perm: nrf_softdevice_s132::ble_gap_conn_sec_mode_t {
                 _bitfield_1: raw::ble_gap_conn_sec_mode_t::new_bitfield_1(0, 0),
             },
@@ -401,9 +431,6 @@ fn main() -> ! {
     static COAP_HANDLER_FACTORY: static_cell::StaticCell<CoapHandlerFactory> =
         static_cell::StaticCell::new();
 
-    use ace_oscore_helpers::aead;
-    let rs_as_association = include!(concat!(env!("OUT_DIR"), "/rs_as_association.rs"));
-
     let rs = RS.init(embassy_sync::mutex::Mutex::new(
         ResourceServer::new_with_association_and_randomness(rs_as_association, move |buf| {
             // We can afford unwrapping here because the BLE exchanges to get here produce a nice
@@ -421,6 +448,7 @@ fn main() -> ! {
         unwrap!(spawner.spawn(bluetooth_task(
             sd,
             server,
+            scan_data,
             spawner,
             coap_handler_factory,
             rs
