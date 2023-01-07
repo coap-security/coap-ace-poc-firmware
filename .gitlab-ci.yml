@@ -3,7 +3,7 @@ pages:
   script:
     - rustup target add thumbv7em-none-eabihf --toolchain nightly
     - apt-get update && apt-get install -y wget unzip srecord libclang-dev gcc-arm-none-eabi
-    - sh -x ./build-hexfile.sh
+    - sh -x ./build-hexfiles.sh
     - mkdir public
     - |
       cat > public/index.html <<EOF
@@ -22,7 +22,13 @@ pages:
       <body>
       <h1>CoAP/ACE PoC: Firmware download</h1>
       <p>Available files:</p>
-      <ul><li><a href="coap-ace-poc-firmware.hex" download>coap-ace-poc-firmware.hex</a> <details class="hash"><summary>SHA256sum</summary> `sha256sum coap-ace-poc-firmware.hex | cut -d" " -f1`</li></ul>
+      <ul>
+      EOF
+      for f in $(cd images; echo *.hex); do
+        echo '<li><a href="images/'$f'" download>'$f'</a> <details class="hash"><summary>SHA256sum</summary> '`sha256sum images/$f | cut -d" " -f1`'</li>' >> public/index.html
+      done
+      cat >> public/index.html <<EOF
+      </ul>
       <footer>
       <p>Built from version `git describe --always`.</p>
       <p>Please refer to the
@@ -32,7 +38,7 @@ pages:
       </body>
       </html>
       EOF
-    - mv coap-ace-poc-firmware.hex public/
+    - mv images public/
 
     - cargo +nightly doc
     - mv target/thumbv7em-none-eabihf/doc public/doc
