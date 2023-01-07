@@ -5,8 +5,6 @@
 
 extern crate alloc;
 
-use static_cell::StaticCell;
-
 static mut HEAP: [u8; 4096] = [0; 4096]; // 512 doesn't suffice even for a minimal token
                                          // response, but we won't change dcaf and coset over
                                          // night. More than 2048 needed when also doing the

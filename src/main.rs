@@ -83,8 +83,6 @@ mod blink;
 mod coap;
 mod devicetime;
 
-use core::ops::DerefMut;
-
 use defmt_rtt as _;
 use embassy_nrf as _;
 use panic_probe as _;
@@ -111,7 +109,7 @@ const MAX_CONNECTIONS: u8 = 4;
 /// late, which is OK for being in a racy situation).
 ///
 /// This is used with SeqCst for laziness; a better solution would be
-/// https://github.com/embassy-rs/embassy/issues/1080 anyway.
+/// <https://github.com/embassy-rs/embassy/issues/1080> anyway.
 static USED_CONNECTIONS: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
 
 /// Background task in which the Softdevice handless all its tasks.
@@ -264,6 +262,9 @@ async fn bluetooth_task(
                 },
             )
             .await;
+            if let Err(err) = nonconn {
+                error!("Failed to advertise: {:?}", err);
+            }
         }
 
         info!("Advertising as connectable until a connection is establsihed");
@@ -309,19 +310,13 @@ fn chip_startup() -> ChipParts {
 
     let peripherals = embassy_nrf::init(config);
 
-    // FIXME this should probably conflict with embassy_nrf's init
-    //
-    // Preferably those should be forwarded by embassy_nrf
-    let bare_peripherals = unwrap!(nrf52832_hal::pac::Peripherals::take());
-
     use embassy_nrf::gpio::{Level, Output, OutputDrive};
     // See https://infocenter.nordicsemi.com/topic/ug_nrf52832_dk/UG/nrf52_DK/hw_btns_leds.html
     let mut led1_pin = Output::new(peripherals.P0_17, Level::High, OutputDrive::Standard);
-    let mut led2_pin = Output::new(peripherals.P0_18, Level::High, OutputDrive::Standard);
-    let mut led3_pin = Output::new(peripherals.P0_19, Level::High, OutputDrive::Standard);
+    let led2_pin = Output::new(peripherals.P0_18, Level::High, OutputDrive::Standard);
+    let led3_pin = Output::new(peripherals.P0_19, Level::High, OutputDrive::Standard);
     let mut led4_pin = Output::new(peripherals.P0_20, Level::High, OutputDrive::Standard);
 
-    use nrf52832_hal::prelude::OutputPin;
     led1_pin.set_low();
     led4_pin.set_low();
 
@@ -406,7 +401,7 @@ fn main() -> ! {
     static COAP_HANDLER_FACTORY: static_cell::StaticCell<CoapHandlerFactory> =
         static_cell::StaticCell::new();
 
-    use ace_oscore_helpers::{aead, aes};
+    use ace_oscore_helpers::aead;
     let rs_as_association = include!(concat!(env!("OUT_DIR"), "/rs_as_association.rs"));
 
     let rs = RS.init(embassy_sync::mutex::Mutex::new(

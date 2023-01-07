@@ -4,8 +4,6 @@
 //! the resources `/time`, `/leds`, `/temp` and `/identify`, all backed by structs of this module,
 //! and `/authz-info`, backed by a resource server.
 
-use ace_oscore_helpers::resourceserver::ResourceServer;
-
 pub type CoapHandler = impl coap_handler::Handler;
 
 /// Resource handler for the [crate::devicetime] UNIX time tracking.
@@ -199,7 +197,7 @@ impl coap_handler::Handler for UnauthorizedSeeAS {
     ) -> Self::RequestData {
         // We already know all we need
     }
-    fn estimate_length(&mut self, data: &Self::RequestData) -> usize {
+    fn estimate_length(&mut self, _data: &Self::RequestData) -> usize {
         150
     }
     fn build_response(

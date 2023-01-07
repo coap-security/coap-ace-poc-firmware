@@ -57,7 +57,7 @@ impl<'a> TryFrom<&'a coset::cwt::ClaimsSet> for ApplicationClaims {
         // Verify that the token applies to us.
 
         let mut scope = None;
-        let mut exp = match claims.expiration_time {
+        let exp = match claims.expiration_time {
             Some(coset::cwt::Timestamp::WholeSeconds(n)) => n.try_into().ok(),
             _ => None,
         };

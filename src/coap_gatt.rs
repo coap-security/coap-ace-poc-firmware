@@ -12,11 +12,8 @@
 //! The module's simplicity is also due to all the message parsing being delegated to the
 //! [coap_gatt_utils] module. In fact, this module might move in there over time.
 
-use core::ops::Deref;
-
-use ace_oscore_helpers::resourceserver::ResourceServer;
 use coap_handler::Handler;
-use coap_message::{MinimalWritableMessage, ReadableMessage};
+use coap_message::MinimalWritableMessage;
 
 /// State held inside a single connection
 ///
