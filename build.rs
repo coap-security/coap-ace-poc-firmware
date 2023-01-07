@@ -11,8 +11,7 @@ struct Config<'a> {
 
 fn main() {
     println!("cargo:rerun-if-env-changed=RS_AS_ASSOCIATION");
-    let config_file =
-        std::env::var("RS_AS_ASSOCIATION").unwrap_or("demo_as_association.yaml".to_string());
+    let config_file = std::env::var("RS_AS_ASSOCIATION").unwrap_or("configs/d00.yaml".to_string());
     println!("cargo:rerun-if-changed={}", config_file);
     let yaml = std::fs::read(config_file).expect("Configuration file missing");
     let yaml = String::from_utf8(yaml).expect("Config file is not UTF-8");

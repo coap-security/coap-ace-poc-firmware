@@ -57,7 +57,7 @@
 //!
 //! ## Device identity
 //!
-//! By default, `./demo_as_association.yaml` is used to configure the AS to use, and contains a key
+//! By default, `configs/d00.yaml` is used to configure the AS to use, and contains a key
 //! shared between the device and its corresponding AS. When using multiple devices, they should
 //! all be provisioned with individual identities (i.e. different audience values and individual
 //! keys). The file to be used for a particular build can be passed in through the
