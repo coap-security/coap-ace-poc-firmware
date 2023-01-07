@@ -2,7 +2,7 @@
 
 set -e
 
-cargo +nightly build --release
+cargo +nightly build --release --target-dir=target
 OURTMP=$(mktemp --directory)
 objcopy -O ihex target/thumbv7em-none-eabihf/release/coap-ace-poc-firmware "$OURTMP"/firmware.hex
 # Note that we can distribute the result pretty easily -- it's a binary that is
