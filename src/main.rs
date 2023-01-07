@@ -94,7 +94,7 @@ static EXECUTOR: static_cell::StaticCell<Executor> = static_cell::StaticCell::ne
 /// Maximum number of concurrent BLE connections to manage
 ///
 /// Careful: Must match the executor::task(pool_size) manually (see also [USED_CONNECTIONS])
-const MAX_CONNECTIONS: u8 = 2;
+const MAX_CONNECTIONS: u8 = 4;
 /// Number of active BLE connections. This only roughly corresponds to the number of blueworker
 /// tasks running (as the only time we can decrement that counter is before blueworker returns).
 /// It's important to keep that counter pessimistic w/rt the actually used softdevice connections,
@@ -165,7 +165,7 @@ impl CoapHandlerFactory {
 /// This is spawned from [bluetooth_task] once a connection arrives, and terminates at
 /// disconnection.
 // Careful: pool_size must match MAX_CONNECTIONS
-#[embassy_executor::task(pool_size = 2)]
+#[embassy_executor::task(pool_size = 4)]
 async fn blueworker(
     server: &'static Server,
     conn: nrf_softdevice::ble::Connection,
