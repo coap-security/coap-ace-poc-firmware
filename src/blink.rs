@@ -73,9 +73,9 @@ impl LedPins {
         use nrf52832_hal::prelude::OutputPin;
         // `<` rather than `>=`: Pins are active-low.
         self.l1.set_state((level < 1).into()).unwrap();
-        self.l2.set_state((level < 2).into()).unwrap();
+        self.l4.set_state((level < 2).into()).unwrap();
         self.l3.set_state((level < 3).into()).unwrap();
-        self.l4.set_state((level < 4).into()).unwrap();
+        self.l2.set_state((level < 4).into()).unwrap();
     }
 
     async fn identify(&mut self) {

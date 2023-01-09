@@ -304,13 +304,10 @@ fn chip_startup() -> ChipParts {
 
     use embassy_nrf::gpio::{Level, Output, OutputDrive};
     // See https://infocenter.nordicsemi.com/topic/ug_nrf52832_dk/UG/nrf52_DK/hw_btns_leds.html
-    let mut led1_pin = Output::new(peripherals.P0_17, Level::High, OutputDrive::Standard);
-    let led2_pin = Output::new(peripherals.P0_18, Level::High, OutputDrive::Standard);
-    let led3_pin = Output::new(peripherals.P0_19, Level::High, OutputDrive::Standard);
-    let mut led4_pin = Output::new(peripherals.P0_20, Level::High, OutputDrive::Standard);
-
-    led1_pin.set_low();
-    led4_pin.set_low();
+    let led1_pin = Output::new(peripherals.P0_17, Level::Low, OutputDrive::Standard);
+    let led2_pin = Output::new(peripherals.P0_18, Level::Low, OutputDrive::Standard);
+    let led3_pin = Output::new(peripherals.P0_19, Level::Low, OutputDrive::Standard);
+    let led4_pin = Output::new(peripherals.P0_20, Level::Low, OutputDrive::Standard);
 
     // Left in as a template for other interrupt driven components -- but the softdevice wants the
     // temperature interrupt for its own. See also complaints about how the softdevice handles this
@@ -441,6 +438,7 @@ fn main() -> ! {
 
     executor.run(move |spawner| {
         let leds: &'static blink::Leds = LEDS.init(blink::Leds::new(spawner, leds));
+        leds.set_idle(2);
 
         let coap_handler_factory = COAP_HANDLER_FACTORY.init(CoapHandlerFactory { sd, leds });
 
