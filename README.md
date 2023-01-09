@@ -35,21 +35,27 @@ Quick start: Running the proof-of-concept demo
 ----------------------------------------------
 
 * Obtain an [nRF52-DK] device; connect it via USB to a computer and move its power switch to the "on" position.
-* Download the latest build of this firmware [from the build site] as [`coap-ace-poc-firmware.hex`].
-* Copy the file `coap-ace-poc-firmware.hex` onto the "JLINK" USB drive that has appeared on your computer.
+* Download the latest build of this firmware [from the build site] as `coap-ace-poc-firmware-.d??.hex`.
+  When using just a single nRF52-DK, pick any of numbered images.
+  When using multiple devices, pick distinct ones, and consider labelling the devices accordingly.
+* Copy the file `coap-ace-poc-firmware-d??.hex` onto the "JLINK" USB drive that has appeared on your computer.
+  Once copying is done, the device will restart,
+  show two LEDs indicating the application's readiness,
+  and USB drive will reappear without the file.
 * Direct a Bluetooth capable's cellphone web browser (Chrome or Chromium) to [the corresponding web app].
   Follow the login instructions, picking either the role of the "junior" or the "senior".
+  Note that in the course of the login, the BLE connection is severed and needs to be reestablished.
 
   You may also install the mobile application through the browser's "Install app" button.
 
 * Use the web application's controls to read the device's temperature,
+  to find the device (making its LEDs spin briefly),
   or to alter its identification LEDs ("senior" only).
 
   For illustration purposes, the web application is not made aware of the permission levels,
   and unauthorized control attempts will fail.
 
 [from the build site]: https://oscore.gitlab.io/coap-ace-poc-firmware/
-[`coap-ace-poc-firmware.hex`]: https://oscore.gitlab.io/coap-ace-poc-firmware/coap-ace-poc-firmware.hex
 [the corresponding web app]: https://oscore.gitlab.io/coap-ace-poc-webapp/
 
 The workings -- getting to know the components
