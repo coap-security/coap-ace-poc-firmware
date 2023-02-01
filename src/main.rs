@@ -12,7 +12,7 @@
 //!
 //! You'll need:
 //!
-//! * a nightly Rust compiler
+//! * a nightly Rust compiler with support for the thumbv7em-none-eabihf target
 //! * a copy of the [S132 softdevice] (eg. `s132_nrf52_7.3.0_softdevice.hex`)
 //!
 //!   Note that that software is limited in how it can be distributed; you will find the precise
