@@ -51,7 +51,7 @@
 //! * Run
 //!
 //!   ```shell
-//!   $ cargo +nightly run
+//!   $ cargo +nightly run --release
 //!   ```
 //!
 //!   which downloads all relevant crates, builds them and flashes them, all using `probe-run`.
