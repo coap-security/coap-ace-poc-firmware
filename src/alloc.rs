@@ -12,12 +12,6 @@ static mut HEAP: [u8; 4096] = [0; 4096]; // 512 doesn't suffice even for a minim
 #[global_allocator]
 static ALLOCATOR: embedded_alloc::Heap = embedded_alloc::Heap::empty();
 
-#[alloc_error_handler]
-fn handle_alloc_error(_: core::alloc::Layout) -> ! {
-    defmt::error!("Allocation failed");
-    loop {}
-}
-
 /// Start the global allocator
 ///
 /// Use as late as possible during startup to ensure that earlier allocations fail (we don't want

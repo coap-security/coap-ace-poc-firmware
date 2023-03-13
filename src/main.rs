@@ -73,7 +73,6 @@
 #![no_std]
 #![no_main]
 #![feature(type_alias_impl_trait)]
-#![feature(alloc_error_handler)]
 
 mod coap_gatt;
 mod rs_configuration;
