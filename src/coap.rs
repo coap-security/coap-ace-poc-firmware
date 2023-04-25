@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright 2022 EDF (Électricité de France S.A.)
+// SPDX-License-Identifier: BSD-3-Clause
+// See README for all details on copyright, authorship and license.
 //! CoAP handlers for the demo application
 //!
 //! This modules's main entry point is [create_coap_handler], which produces a full handler with
