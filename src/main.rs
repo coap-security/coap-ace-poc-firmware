@@ -198,11 +198,8 @@ async fn blueworker(
             }
         },
     })
-    .await
-    .unwrap_or_else(|e| match e {
-        gatt_server::RunError::Disconnected => info!("Peer disconnected"),
-        gatt_server::RunError::Raw(e) => error!("Error from gat_server: {:?}", e),
-    });
+    .await;
+    info!("Peer disconnected");
 
     USED_CONNECTIONS.fetch_sub(1, core::sync::atomic::Ordering::SeqCst);
 }
@@ -535,11 +532,6 @@ pub fn do_oscore_test() -> Result<(), &'static str> {
     drop(primitive);
 
     Ok(())
-}
-
-#[no_mangle]
-unsafe extern "C" fn abort() {
-    defmt::panic!("C abort called");
 }
 
 #[no_mangle]
