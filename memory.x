@@ -1,6 +1,7 @@
-// SPDX-FileCopyrightText: Copyright 2022 EDF (Électricité de France S.A.)
-// SPDX-License-Identifier: BSD-3-Clause
-// See README for all details on copyright, authorship and license.
+/* SPDX-FileCopyrightText: Copyright 2022 EDF (Électricité de France S.A.)
+ * SPDX-License-Identifier: BSD-3-Clause
+ * See README for all details on copyright, authorship and license.
+ */
 MEMORY
 {
   /* These values correspond to the NRF52832_xxAA with SoftDevices S152 7.3.0 */
