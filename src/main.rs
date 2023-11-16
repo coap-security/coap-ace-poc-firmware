@@ -438,12 +438,25 @@ fn main() -> ! {
     static COAP_HANDLER_FACTORY: static_cell::StaticCell<CoapHandlerFactory> =
         static_cell::StaticCell::new();
 
-    let rs = RS.init(embassy_sync::mutex::Mutex::new(
-        ResourceServer::new_with_association_and_randomness(rs_as_association, move |buf| {
+    // TAIT requirement hack inspired by tait_hack of https://github.com/rtic-rs/rtic/pull/782/files
+    // This works around the requirement that TAIT (as used for RandomClosure) needs a return
+    // position that defines it (and can't be defined by being passed in as an argument).
+    //
+    // This is the defining use of RandomClosure
+    #[inline(always)]
+    fn build_random_closure(sd: &'static Softdevice) -> RandomClosure {
+        move |buf| {
             // We can afford unwrapping here because the BLE exchanges to get here produce a nice
             // amount of entropy already
             unwrap!(nrf_softdevice::random_bytes(&sd, buf))
-        }),
+        }
+    }
+
+    let rs = RS.init(embassy_sync::mutex::Mutex::new(
+        ResourceServer::new_with_association_and_randomness(
+            rs_as_association,
+            build_random_closure(sd),
+        ),
     ));
 
     executor.run(move |spawner| {
