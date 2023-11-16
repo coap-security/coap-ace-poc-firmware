@@ -132,7 +132,7 @@ const MAX_MESSAGE_LEN: usize = 400;
 
 #[nrf_softdevice::gatt_service(uuid = "8df804b7-3300-496d-9dfa-f8fb40a236bc")]
 struct CoAPGattService {
-    #[characteristic(uuid = "2a58fc3f-3c62-4ecc-8167-d66d4d9410c2", read, write, indicate)]
+    #[characteristic(uuid = "2a58fc3f-3c62-4ecc-8167-d66d4d9410c2", write, indicate)]
     message: heapless::Vec<u8, MAX_MESSAGE_LEN>,
 }
 
@@ -190,7 +190,9 @@ async fn blueworker(
 
                 info!("Setting response {:?}", response);
 
+                // Just in case someone polls
                 unwrap!(server.coap.message_set(&response));
+                unwrap!(server.coap.message_indicate(&conn, &response));
             }
             CoAPGattServiceEvent::MessageCccdWrite { indications: ind } => {
                 // Indications are currently specified but not implemented
@@ -331,11 +333,20 @@ fn chip_startup() -> ChipParts {
     }
 }
 
+/// Technical entry point
+///
+/// This defers to an non-decorated entry function to more easily debug any issues arising from
+/// statics (because while the [main] function below uses statics, it does not rely on the special
+/// treatment of them that the `#[entry]` attribute would give them).
+#[entry]
+fn outer_main() -> ! {
+    main()
+}
+
 /// Entry function
 ///
 /// This assembles the configuration, starts up the softdevice, and lets both the softdevice and
 /// other tasks (LED animations, Bluetooth handlers) run in parallel.
-#[entry]
 fn main() -> ! {
     info!("Device is starting up...");
 
