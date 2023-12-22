@@ -97,7 +97,7 @@ impl Connection {
             None => None,
         };
 
-        if let Some(oscore_option) = oscore_option {
+        let vec07: heapless07::Vec<u8, 400> = if let Some(oscore_option) = oscore_option {
             // Look it up, lock RS, or 5.03
             if let Some(mut rs) = self.rs.try_lock().ok() {
                 let mut context_app_claims = rs.look_up_context(&oscore_option);
@@ -129,11 +129,14 @@ impl Connection {
                     ) else {
                         defmt::error!("OSCORE request could not be unprotected");
 
-                        return coap_gatt_utils::write(|response| {
-                            response.set_code(coap_numbers::code::BAD_REQUEST);
-                            // Could also set "Decryption failed"
-                            response.set_payload(b"");
-                        });
+                        return heapless::Vec::from_slice(&coap_gatt_utils::write::<400>(
+                            |response| {
+                                response.set_code(coap_numbers::code::BAD_REQUEST);
+                                // Could also set "Decryption failed"
+                                response.set_payload(b"");
+                            },
+                        ))
+                        .expect("Conversion between heapless versions should not fail");
                     };
 
                     defmt::info!("OSCORE request processed, building response...");
@@ -177,6 +180,8 @@ impl Connection {
             let extracted = handler.extract_request_data(&request);
 
             coap_gatt_utils::write(|response| handler.build_response(response, extracted))
-        }
+        };
+        heapless::Vec::from_slice(&vec07)
+            .expect("Conversion between heapless versions should not fail")
     }
 }
