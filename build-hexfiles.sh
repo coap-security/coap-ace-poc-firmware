@@ -10,8 +10,8 @@ OURTMP=$(mktemp --directory)
 # Note that we can distribute the result pretty easily -- it's a binary that is
 # a software update for a Nordic device, and as such doesn't even need the
 # license to be shipped with it.
-# wget https://nsscprodmedia.blob.core.windows.net/prod/software-and-other-downloads/softdevices/s132/s132_nrf52_7.3.0.zip -O "$OURTMP"/s132_nrf52_7.3.0.zip
-# unzip "$OURTMP"/s132_nrf52_7.3.0.zip s132_nrf52_7.3.0_softdevice.hex -d "$OURTMP"
+wget https://nsscprodmedia.blob.core.windows.net/prod/software-and-other-downloads/softdevices/s132/s132_nrf52_7.3.0.zip -O "$OURTMP"/s132_nrf52_7.3.0.zip
+unzip "$OURTMP"/s132_nrf52_7.3.0.zip s132_nrf52_7.3.0_softdevice.hex -d "$OURTMP"
 
 mkdir -p images
 
@@ -39,7 +39,7 @@ do
     # * The hex files provided by Nordic have no start address. (eg.
     #   proximity_demo/ble_app_proximity_s132_pca10040.hex,
     #   heart_rate_demo/heart_rate_demo.hex).
-    #srec_cat -disable Execution_Start_Address ./uicr_reset_pin21.hex -Intel "$OURTMP"/firmware.hex -Intel "$OURTMP"/s132_nrf52_7.3.0_softdevice.hex -Intel -o images/coap-ace-poc-firmware-${ident%.yaml}.hex -Intel -Output_Block_Size 16
+    srec_cat -disable Execution_Start_Address ./uicr_reset_pin21.hex -Intel "$OURTMP"/firmware.hex -Intel "$OURTMP"/s132_nrf52_7.3.0_softdevice.hex -Intel -o images/coap-ace-poc-firmware-${ident%.yaml}.hex -Intel -Output_Block_Size 16
 done
 
 rm -rf "${OURTMP}"
