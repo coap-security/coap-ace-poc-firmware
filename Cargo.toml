@@ -96,12 +96,12 @@ hex = "0.4"
 
 [patch.crates-io]
 # These are published, but wisdom on matrix is to not mix them
-embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "87c03037e320ce30c0cd34fe97e0365e1b11aa9a" }
-embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "87c03037e320ce30c0cd34fe97e0365e1b11aa9a" }
-embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "87c03037e320ce30c0cd34fe97e0365e1b11aa9a" }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "3b6eaf414a92114037a40dcb3ce37a4191c57a2b" }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "3b6eaf414a92114037a40dcb3ce37a4191c57a2b" }
+embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "3b6eaf414a92114037a40dcb3ce37a4191c57a2b" }
 
 # None of these are available on crates.io yet
-embassy-nrf = { git = "https://github.com/embassy-rs/embassy", rev = "87c03037e320ce30c0cd34fe97e0365e1b11aa9a" }
+embassy-nrf = { git = "https://github.com/embassy-rs/embassy", rev = "3b6eaf414a92114037a40dcb3ce37a4191c57a2b" }
 
 nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "fa1d5915be4de37b97b4771ddd22bce07d69be54" }
 nrf-softdevice-s132 = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "fa1d5915be4de37b97b4771ddd22bce07d69be54" }
