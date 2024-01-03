@@ -74,10 +74,14 @@ impl<'a> TryFrom<&'a coset::cwt::ClaimsSet> for ApplicationClaims {
                     let new = match s.as_slice() {
                         b"\x83\x82e/temp\x00\x82i/identify\x01\x82e/leds\x02" => Role::Senior,
                         b"\x82\x82e/temp\x00\x82i/identify\x01" => Role::Junior,
-                        _ => return Err(UnrecognizedCredentials),
+                        _ => {
+                            defmt::info!("Unrecognized scope claim, rejecting.");
+                            return Err(UnrecognizedCredentials);
+                        }
                     };
                     if scope.replace(new).is_some() {
                         // Double key
+                        defmt::info!("Duplicate scope claim, rejecting.");
                         return Err(UnrecognizedCredentials);
                     }
                 }
@@ -86,20 +90,24 @@ impl<'a> TryFrom<&'a coset::cwt::ClaimsSet> for ApplicationClaims {
         }
 
         let Some(scope) = scope else {
+            defmt::info!("No scope set, rejecting.");
             return Err(UnrecognizedCredentials);
         };
 
         let Some(exp) = exp else {
             // Let's not even get started with infinite credentials
+            defmt::info!("No expiry set, rejecting.");
             return Err(UnrecognizedCredentials);
         };
 
         let appclaims = ApplicationClaims { role: scope, exp };
 
         if !appclaims.valid() {
+            defmt::info!("Token recognized, but validity test failed.");
             return Err(UnrecognizedCredentials);
         }
 
+        defmt::info!("Token accepted: {:?}", appclaims);
         Ok(appclaims)
     }
 }
