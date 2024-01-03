@@ -273,22 +273,21 @@ pub fn create_coap_handler(
     let mut leds_handler = Either::B(UnauthorizedSeeAS(&rs));
     let mut identify_handler = Either::B(UnauthorizedSeeAS(&rs));
 
-    if matches!(claims, Some(_)) {
-        // Either Junior or Senior may use these
-        temperature_handler = Either::A(coap_handler_implementations::SimpleWrapper::new_minicbor(
-            Temperature { softdevice },
-        ));
+    // FIXME: These checks completely disregard the precise bits that are set. This works as long
+    // as our resources are either read-only or write-only, and the AS issues only tokens for what
+    // works, but it is not full AIF.
+
+    if claims.map(|c| c.scope.identify != 0) == Some(true) {
         identify_handler = Either::A(Identify(leds));
     }
 
-    if matches!(
-        claims,
-        Some(crate::rs_configuration::ApplicationClaims {
-            role: crate::rs_configuration::Role::Senior,
-            ..
-        })
-    ) {
-        // Only Senior may write that
+    if claims.map(|c| c.scope.temp != 0) == Some(true) {
+        temperature_handler = Either::A(coap_handler_implementations::SimpleWrapper::new_minicbor(
+            Temperature { softdevice },
+        ));
+    }
+
+    if claims.map(|c| c.scope.leds != 0) == Some(true) {
         leds_handler = Either::A(coap_handler_implementations::SimpleWrapper::new_minicbor(
             Leds(leds),
         ));

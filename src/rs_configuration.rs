@@ -11,10 +11,9 @@
 ///
 /// It also does not encode the technical details on how the peer identifies in the security
 /// protocol: These are stored inside the RS's token pool, and already processed there.
-// FIXME switch to AIF
 #[derive(defmt::Format)]
 pub struct ApplicationClaims {
-    pub role: Role,
+    pub scope: Permissions,
     pub exp: u32,
 }
 
@@ -37,10 +36,48 @@ impl ApplicationClaims {
     }
 }
 
-#[derive(defmt::Format)]
-pub enum Role {
-    Junior,
-    Senior,
+/// The pre-parsed AIF.
+///
+/// Struct members correspond to URI-local-part Toid, values to REST-method-set Tperm.
+///
+/// Note that this is custom and manual; a better solution would be deriving this struct and the
+/// match in its parsing function from a description of the CoAP tree.
+#[derive(defmt::Format, Default)]
+pub struct Permissions {
+    /// Permissions on `/temp`
+    pub temp: u8,
+    /// Permissions on `/identify`
+    pub identify: u8,
+    /// Permissions on `/leds`
+    pub leds: u8,
+}
+
+impl Permissions {
+    fn parse(input: &[u8]) -> Result<Self, minicbor::decode::Error> {
+        let mut decoder = minicbor::Decoder::new(input);
+        let mut parsed = Self::default();
+        for item in decoder.array_iter::<(&str, u8)>()? {
+            let (path, perms) = item?;
+            match path {
+                // FIXME: We're transitionally ignoring the precise values because the AIF tokens
+                // issues by the AS were erroneous (they gave value b instead of 1 << b).
+                //
+                // Once the firmware has been updated on all users to this version, the AS can
+                // start issuing the correct bits, and we can start using perms.
+                "/temp" => {
+                    parsed.temp = 1 /*perms*/;
+                }
+                "/identify" => {
+                    parsed.identify = 1 /*perms*/;
+                }
+                "/leds" => {
+                    parsed.leds = 1 /*perms*/
+                }
+                _ => (),
+            }
+        }
+        Ok(parsed)
+    }
 }
 
 /// Error type indicating that a token contains credentials not for us, and/or contains claims that
@@ -71,14 +108,11 @@ impl<'a> TryFrom<&'a coset::cwt::ClaimsSet> for ApplicationClaims {
                     ciborium::value::Value::Bytes(s),
                 ) => {
                     // FIXME value goes back and forth between J/S and AIF
-                    let new = match s.as_slice() {
-                        b"\x83\x82e/temp\x00\x82i/identify\x01\x82e/leds\x02" => Role::Senior,
-                        b"\x82\x82e/temp\x00\x82i/identify\x01" => Role::Junior,
-                        _ => {
-                            defmt::info!("Unrecognized scope claim, rejecting.");
-                            return Err(UnrecognizedCredentials);
-                        }
-                    };
+                    let new = Permissions::parse(s.as_slice()).map_err(|_e| {
+                        // Not reporting value, see https://gitlab.com/twittner/minicbor/-/issues/41
+                        defmt::info!("Unparsable scope claim, rejecting.");
+                        UnrecognizedCredentials
+                    })?;
                     if scope.replace(new).is_some() {
                         // Double key
                         defmt::info!("Duplicate scope claim, rejecting.");
@@ -100,7 +134,7 @@ impl<'a> TryFrom<&'a coset::cwt::ClaimsSet> for ApplicationClaims {
             return Err(UnrecognizedCredentials);
         };
 
-        let appclaims = ApplicationClaims { role: scope, exp };
+        let appclaims = ApplicationClaims { scope, exp };
 
         if !appclaims.valid() {
             defmt::info!("Token recognized, but validity test failed.");
