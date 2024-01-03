@@ -141,48 +141,45 @@ impl coap_handler::Handler for Identify {
 }
 
 /// Resource handler that is decided at the time the handler is built
-pub enum Either<A, B> {
-    A(A),
-    B(B),
+pub struct WithPermissions<H: coap_handler::Handler> {
+    handler: H,
+    permissions: u8,
+    error_handler: UnauthorizedSeeAS,
 }
 
-impl<A, B> coap_handler::Handler for Either<A, B>
+impl<H> coap_handler::Handler for WithPermissions<H>
 where
-    A: coap_handler::Handler,
-    B: coap_handler::Handler,
+    H: coap_handler::Handler,
 {
-    // Could be untagged, but that'd require unsafe code
-    type RequestData = Either<A::RequestData, B::RequestData>;
+    // Absence of request data indicates insufficient permissions
+    type RequestData = Option<H::RequestData>;
 
     fn extract_request_data(
         &mut self,
         request: &impl coap_message::ReadableMessage,
     ) -> Self::RequestData {
-        match self {
-            Either::A(inner) => Either::A(inner.extract_request_data(request)),
-            Either::B(inner) => Either::B(inner.extract_request_data(request)),
+        let codenumber: u8 = request.code().into();
+        let codebit = 1u8.checked_shl((codenumber - 1u8).into());
+        if codebit.map(|bit| bit & self.permissions != 0) == Some(true) {
+            Some(self.handler.extract_request_data(request))
+        } else {
+            None
         }
     }
     fn estimate_length(&mut self, data: &Self::RequestData) -> usize {
-        match (self, data) {
-            (Either::A(inner), Either::A(data)) => inner.estimate_length(data),
-            (Either::B(inner), Either::B(data)) => inner.estimate_length(data),
-            _ => panic!(
-                "Handler content can't change between request extraction and response building"
-            ), // and users aren't expected to meddle with extracted data either
-        }
+        data.as_ref()
+            .map(|d| self.handler.estimate_length(d))
+            .unwrap_or(self.error_handler.estimate_length(&()))
     }
     fn build_response(
         &mut self,
         response: &mut impl coap_message::MutableWritableMessage,
         data: Self::RequestData,
     ) {
-        match (self, data) {
-            (Either::A(inner), Either::A(data)) => inner.build_response(response, data),
-            (Either::B(inner), Either::B(data)) => inner.build_response(response, data),
-            _ => panic!(
-                "Handler content can't change between request extraction and response building"
-            ), // and users aren't expected to meddle with extracted data either
+        if let Some(data) = data {
+            self.handler.build_response(response, data)
+        } else {
+            self.error_handler.build_response(response, ())
         }
     }
 }
@@ -269,30 +266,25 @@ pub fn create_coap_handler(
         )],
     );
 
-    let mut temperature_handler = Either::B(UnauthorizedSeeAS(&rs));
-    let mut leds_handler = Either::B(UnauthorizedSeeAS(&rs));
-    let mut identify_handler = Either::B(UnauthorizedSeeAS(&rs));
+    let identify_handler = WithPermissions {
+        handler: Identify(leds),
+        permissions: claims.map(|c| c.scope.identify).unwrap_or(0),
+        error_handler: UnauthorizedSeeAS(&rs),
+    };
 
-    if matches!(claims, Some(_)) {
-        // Either Junior or Senior may use these
-        temperature_handler = Either::A(coap_handler_implementations::SimpleWrapper::new_minicbor(
-            Temperature { softdevice },
-        ));
-        identify_handler = Either::A(Identify(leds));
-    }
+    let temperature_handler = WithPermissions {
+        handler: coap_handler_implementations::SimpleWrapper::new_minicbor(Temperature {
+            softdevice,
+        }),
+        permissions: claims.map(|c| c.scope.temp).unwrap_or(0),
+        error_handler: UnauthorizedSeeAS(&rs),
+    };
 
-    if matches!(
-        claims,
-        Some(crate::rs_configuration::ApplicationClaims {
-            role: crate::rs_configuration::Role::Senior,
-            ..
-        })
-    ) {
-        // Only Senior may write that
-        leds_handler = Either::A(coap_handler_implementations::SimpleWrapper::new_minicbor(
-            Leds(leds),
-        ));
-    }
+    let leds_handler = WithPermissions {
+        handler: coap_handler_implementations::SimpleWrapper::new_minicbor(Leds(leds)),
+        permissions: claims.map(|c| c.scope.leds).unwrap_or(0),
+        error_handler: UnauthorizedSeeAS(&rs),
+    };
 
     // Why isn't SimpleWrapper Reporting?
     let time_handler = coap_handler_implementations::wkc::ConstantSingleRecordReport::new(
