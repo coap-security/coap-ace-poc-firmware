@@ -59,19 +59,14 @@ impl Permissions {
         for item in decoder.array_iter::<(&str, u8)>()? {
             let (path, perms) = item?;
             match path {
-                // FIXME: We're transitionally ignoring the precise values because the AIF tokens
-                // issues by the AS were erroneous (they gave value b instead of 1 << b).
-                //
-                // Once the firmware has been updated on all users to this version, the AS can
-                // start issuing the correct bits, and we can start using perms.
                 "/temp" => {
-                    parsed.temp = 1 /*perms*/;
+                    parsed.temp = perms;
                 }
                 "/identify" => {
-                    parsed.identify = 1 /*perms*/;
+                    parsed.identify = perms;
                 }
                 "/leds" => {
-                    parsed.leds = 1 /*perms*/
+                    parsed.leds = perms;
                 }
                 _ => (),
             }
