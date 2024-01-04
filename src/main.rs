@@ -474,7 +474,10 @@ fn main() -> ! {
             coap_handler_factory,
             rs
         )));
-        info!("Device is ready.");
+        info!(
+            "Device is ready at {}.",
+            nrf_softdevice::ble::get_address(sd)
+        );
 
         // Initializing this only late to ensure that nothing of the "regular" things depends on
         // having a heap; this is only for dcaf / coset as they work with ciborium
