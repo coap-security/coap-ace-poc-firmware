@@ -123,6 +123,28 @@ async fn softdevice_task(sd: &'static Softdevice) {
     sd.run().await;
 }
 
+struct SdRandomness(&'static Softdevice);
+
+impl rand_core::RngCore for SdRandomness {
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
+        nrf_softdevice::random_bytes(self.0, dest)
+            .map_err(|_| rand_core::Error::from(core::num::NonZeroU32::new(1).unwrap()))
+    }
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        self.try_fill_bytes(dest).unwrap();
+    }
+    fn next_u32(&mut self) -> u32 {
+        let mut buf = [0; 4];
+        self.fill_bytes(&mut buf);
+        u32::from_be_bytes(buf)
+    }
+    fn next_u64(&mut self) -> u64 {
+        let mut buf = [0; 8];
+        self.fill_bytes(&mut buf);
+        u64::from_be_bytes(buf)
+    }
+}
+
 // None of our current users take these as actual UUIDs...
 // let coap_gatt_us: Uuid = "8df804b7-3300-496d-9dfa-f8fb40a236bc".parse().unwrap();
 // let coap_gatt_uc: Uuid = "2a58fc3f-3c62-4ecc-8167-d66d4d9410c2".parse().unwrap();
@@ -142,14 +164,13 @@ struct Server {
     coap: CoAPGattService,
 }
 
-type RandomClosure = impl FnMut(&mut [u8]);
 type RsMutex = embassy_sync::mutex::Mutex<
     embassy_sync::blocking_mutex::raw::NoopRawMutex,
-    ResourceServer<rs_configuration::ApplicationClaims, RandomClosure>,
+    ResourceServer<rs_configuration::ApplicationClaims, SdRandomness>,
 >;
 type Rs = embassy_sync::mutex::Mutex<
     embassy_sync::blocking_mutex::raw::NoopRawMutex,
-    ResourceServer<crate::rs_configuration::ApplicationClaims, RandomClosure>,
+    ResourceServer<crate::rs_configuration::ApplicationClaims, SdRandomness>,
 >;
 // runs into an ICE which I couldn't minify yet
 // type CoapHandlerFactory = impl Fn(Option<crate::rs_configuration::ApplicationClaims>, &'static Rs) -> coap::CoapHandler + 'static;
@@ -438,25 +459,8 @@ fn main() -> ! {
     static COAP_HANDLER_FACTORY: static_cell::StaticCell<CoapHandlerFactory> =
         static_cell::StaticCell::new();
 
-    // TAIT requirement hack inspired by tait_hack of https://github.com/rtic-rs/rtic/pull/782/files
-    // This works around the requirement that TAIT (as used for RandomClosure) needs a return
-    // position that defines it (and can't be defined by being passed in as an argument).
-    //
-    // This is the defining use of RandomClosure
-    #[inline(always)]
-    fn build_random_closure(sd: &'static Softdevice) -> RandomClosure {
-        move |buf| {
-            // We can afford unwrapping here because the BLE exchanges to get here produce a nice
-            // amount of entropy already
-            unwrap!(nrf_softdevice::random_bytes(&sd, buf))
-        }
-    }
-
     let rs = RS.init(embassy_sync::mutex::Mutex::new(
-        ResourceServer::new_with_association_and_randomness(
-            rs_as_association,
-            build_random_closure(sd),
-        ),
+        ResourceServer::new_with_association_and_randomness(rs_as_association, SdRandomness(sd)),
     ));
 
     executor.run(move |spawner| {

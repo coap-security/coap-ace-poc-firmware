@@ -71,6 +71,7 @@ minicbor = "0.15"
 
 # RS
 ace-oscore-helpers = { git = "https://gitlab.com/oscore/ace-oscore-helpers/", features = [ "liboscore" ] }
+rand_core = "0.6"
 dcaf = { version = "^0.3", default-features = false }
 coset = { version = "^0.3", default-features = false }
 

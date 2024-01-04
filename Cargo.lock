@@ -19,7 +19,7 @@ dependencies = [
 [[package]]
 name = "ace-oscore-helpers"
 version = "0.1.0"
-source = "git+https://gitlab.com/oscore/ace-oscore-helpers/#220bc4b6810b2e149ba415109ab32fe47447054c"
+source = "git+https://gitlab.com/oscore/ace-oscore-helpers/#5fe64420d5ed31aa9b1edaa7e00c206f7b63df11"
 dependencies = [
  "aead",
  "aes",
@@ -37,6 +37,7 @@ dependencies = [
  "heapless 0.7.17",
  "hex-literal",
  "liboscore",
+ "rand_core",
  "uluru",
 ]
 
@@ -408,6 +409,7 @@ dependencies = [
  "nrf-softdevice-s132",
  "nrf52832-hal",
  "panic-probe",
+ "rand_core",
  "serde",
  "serde_yaml",
  "static_cell",
