@@ -132,7 +132,7 @@ const MAX_MESSAGE_LEN: usize = 400;
 
 #[nrf_softdevice::gatt_service(uuid = "8df804b7-3300-496d-9dfa-f8fb40a236bc")]
 struct CoAPGattService {
-    #[characteristic(uuid = "2a58fc3f-3c62-4ecc-8167-d66d4d9410c2", write, indicate)]
+    #[characteristic(uuid = "2a58fc3f-3c62-4ecc-8167-d66d4d9410c2", read, write, indicate)]
     message: heapless::Vec<u8, MAX_MESSAGE_LEN>,
 }
 
