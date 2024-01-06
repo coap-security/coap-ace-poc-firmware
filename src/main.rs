@@ -125,6 +125,9 @@ async fn softdevice_task(sd: &'static Softdevice) {
 
 struct SdRandomness(&'static Softdevice);
 
+// The embassy-nrf::rng::Rng would be an alternative here, but its new() function is so scarily
+// unsafe that I'd rather use this here. (A viable alternative with even less unsafeness would be
+// seeding some PRNG from the softdevice).
 impl rand_core::RngCore for SdRandomness {
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
         nrf_softdevice::random_bytes(self.0, dest)
