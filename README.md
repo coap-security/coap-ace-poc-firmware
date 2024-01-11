@@ -2,10 +2,10 @@
 SPDX-FileCopyrightText: Copyright 2022 EDF (Électricité de France S.A.)
 SPDX-License-Identifier: BSD-3-Clause
 -->
-CoAP/ACE PoC: Firmware
-======================
+CoAP/ACE-OAuth PoC: Firmware
+============================
 
-This repository contains the firmware part of the CoAP/ACE proof-of-concept implementation.
+This repository contains the firmware part of the CoAP/ACE-OAuth proof-of-concept implementation.
 The firmware is written in Rust,
 and designed to run on [nRF52-DK] hardware based on the [S132 softdevice]
 (but is easy to adjust to other nRF devices).
@@ -23,7 +23,7 @@ and allows some users to alter the identification LEDs.
 
 The technology stack it demonstrates by this is
 
-* an [ACE (RFC9200)] Resource Server (RS) -- this limits the interactions of users according to an authorization server's decisions
+* an [ACE-OAuth (RFC9200)] Resource Server (RS) -- this limits the interactions of users according to an authorization server's decisions
 * the [ACE OSCORE profile (RFC9203)] -- this connects the ACE framework with OSCORE, and generates OSCORE keys
 * [OSCORE (RFC8613)] -- this secures communication with symmetric keys, independent of the precise transport mechanism used
 * [CoAP (RFC7252)] -- this gives a compact and versatile application protocol with flexible forwarding options
