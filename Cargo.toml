@@ -79,10 +79,10 @@ embedded-alloc = "0.5"
 # Needed to introspect ClaimsSet.rest
 ciborium = { version = "0.2", default-features = false }
 
-liboscore = { git = "https://gitlab.com/oscore/liboscore/", branch = "rust-backends" }
-liboscore-msgbackend = { git = "https://gitlab.com/oscore/liboscore/", branch = "rust-backends", features = [ "alloc" ] }
+liboscore = "0.1.0"
+liboscore-msgbackend = { version = "0.1.0", features = [ "alloc" ] }
 # only to enable the feature
-# liboscore-cryptobackend = { git = "https://gitlab.com/oscore/liboscore/", branch = "rust-backends", features = [ "log_cryptographic_operations_including_secret_keys" ] }
+# liboscore-cryptobackend = { version = "0.1.0", features = [ "log_cryptographic_operations_including_secret_keys" ] }
 # just for the above
 log-to-defmt = "0.1.0"
 
