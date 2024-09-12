@@ -26,7 +26,22 @@ fn main() {
         std::fs::File::create(config_outfile).expect("Config outfile needs to be writable");
     write!(
         config_outfile,
-        "ace_oscore_helpers::resourceserver::RsAsSharedData {{ issuer: Some({:?}), audience: {:?}, as_uri: {:?}, key: aead::generic_array::GenericArray::clone_from_slice(&{:?}) }}",
+        "{{
+            #[no_mangle]
+            static ISSUER: &str = &{:?};
+            #[no_mangle]
+            static AUDIENCE: &str = &{:?};
+            #[no_mangle]
+            static AS_URI: &str = &{:?};
+            #[no_mangle]
+            static KEY: [u8; 32] = {:?};
+            ace_oscore_helpers::resourceserver::RsAsSharedData {{
+                issuer: Some(*core::hint::black_box(&ISSUER)),
+                audience: *core::hint::black_box(&AUDIENCE),
+                as_uri: *core::hint::black_box(&AS_URI),
+                key: aead::generic_array::GenericArray::clone_from_slice(core::hint::black_box(&KEY)),
+            }}
+        }}",
         config.issuer, config.audience, config.as_uri, key,
     )
     .unwrap();
