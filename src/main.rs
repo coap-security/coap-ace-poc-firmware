@@ -35,7 +35,7 @@
 //!   already (eg. if the device was just erased).
 //!
 //!   ```shell
-//!   $ probe-rs-cli download --chip nrf52832_xxAA --format hex /tmp/s132_nrf52_7.3.0/s132_nrf52_7.3.0_softdevice.hex
+//!   $ probe-rs download --chip nrf52832_xxAA --binary-format hex /tmp/s132_nrf52_7.3.0/s132_nrf52_7.3.0_softdevice.hex
 //!   ```
 //!
 //!   * If you encounter errors in the style of "Error: AP ApAddress { dp: Default, ap: 0 } is not
@@ -46,7 +46,7 @@
 //! * Restore operation of the reset pin after the `nrf-recover` wipe:
 //!
 //!   ```shell
-//!   $ cat uicr_reset_pin21.hex | grep -v '//' | probe-rs-cli download --chip nrf52832_xxAA --format hex /dev/stdin
+//!   $ cat uicr_reset_pin21.hex | grep -v '//' | probe-rs download --chip nrf52832_xxAA --binary-format hex /dev/stdin
 //!   ```
 //!
 //!   (where the grep is a workaround for probe-rs not accepting comments in ihex files<!-- https://github.com/martinmroz/ihex/issues/16#issuecomment-1374406055 -->).
@@ -61,6 +61,10 @@
 //!
 //!   After a long horizontal line, the program will print any debug output the firmware produces.
 //!   To increase verbosity, prefix the command with `DEFMT_LOG=info`.
+//!
+//!   If you run into any trouble that look like they stem from C code, there may be inconsistent
+//!   versions of clang in use; setting `LLVM_CONFIG_PATH=/usr/bin/llvm-config-18
+//!   LIBCLANG_PATH=/usr/lib/llvm-18/lib/` or similar helps in those situations.
 //!
 //! Once the firmware is flashed, it will start whenever the device is powered.
 //!

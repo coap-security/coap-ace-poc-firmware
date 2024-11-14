@@ -4,7 +4,7 @@
 
 # Setup as recommended by probe-run. This needs to be adjusted for when running on different hardware.
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
-runner = "probe-run --chip nRF52832_xxAA"
+runner = "probe-rs run --chip nRF52832_xxAA"
 
 [build]
 target = "thumbv7em-none-eabihf"
