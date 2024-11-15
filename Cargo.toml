@@ -22,10 +22,6 @@ hardware-nrf52dk = []
 debug = 2
 
 [dependencies]
-# FIXME: CoAP tools still sit on heapless 0.7, but the softdevice wrapper is on
-# 0.8; grep for heapless07 to see which workarounds need to be removed once
-# that is fixed.
-heapless07 = { package = "heapless", version = "0.7", features = [ "defmt" ] }
 heapless = { version = "0.8", features = [ "defmt-03" ] }
 # Providing general entry
 cortex-m-rt = "0.7.0"
@@ -58,19 +54,21 @@ embassy-nrf = { version = "0.1.0", features = [ "defmt", "nrf52832", "gpiote", "
 # LEDs and buttons, really
 nrf52832-hal = "0.15.1"
 
-coap-message = "0.2"
-coap-gatt-utils = { git = "https://gitlab.com/oscore/coap-gatt-utils/" }
-coap-handler = "0.1"
+coap-message = "0.3"
+coap-message-implementations = "0.1.6"
+coap-message-utils = "0.3.7"
+coap-gatt-utils = { git = "https://gitlab.com/oscore/coap-gatt-utils/", branch = "v02" }
+coap-handler = "0.2"
 # It'd be nice to use ciborium here, but that's not implemented b/c it's not
 # easily no_alloc. Anyway, switching over should only be a matter from moving
 # the handlers from new_minicbor to new_ciborium if the need arises.
-coap-handler-implementations = { version = "0.3.5", features = [ "minicbor" ] }
+coap-handler-implementations = "0.5"
 coap-numbers = "0.2"
 # The version coap-handler-implementations caters for
-minicbor = "0.15"
+minicbor = "0.24"
 
 # RS
-ace-oscore-helpers = { git = "https://gitlab.com/oscore/ace-oscore-helpers/", features = [ "liboscore" ] }
+ace-oscore-helpers = { git = "https://gitlab.com/oscore/ace-oscore-helpers/", features = [ "liboscore" ], branch = "v02" }
 rand_core = "0.6"
 dcaf = { version = "^0.3", default-features = false }
 coset = { version = "^0.3", default-features = false }
@@ -79,8 +77,8 @@ embedded-alloc = "0.5"
 # Needed to introspect ClaimsSet.rest
 ciborium = { version = "0.2", default-features = false }
 
-liboscore = "0.1.0"
-liboscore-msgbackend = { version = "0.1.0", features = [ "alloc" ] }
+liboscore = "0.2.0"
+liboscore-msgbackend = { version = "0.2.0", features = [ "alloc" ] }
 # only to enable the feature
 # liboscore-cryptobackend = { version = "0.1.0", features = [ "log_cryptographic_operations_including_secret_keys" ] }
 # just for the above

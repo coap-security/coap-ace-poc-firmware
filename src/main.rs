@@ -511,8 +511,8 @@ pub fn do_oscore_test() -> Result<(), &'static str> {
     // From OSCORE plug test, security context A
     let immutables = liboscore::PrimitiveImmutables::derive(
         liboscore::HkdfAlg::from_number(5).unwrap(),
-        b"\x9e\x7c\xa9\x22\x23\x78\x63\x40",
         b"\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10",
+        b"\x9e\x7c\xa9\x22\x23\x78\x63\x40",
         None,
         liboscore::AeadAlg::from_number(24).unwrap(),
         b"\x01",
@@ -522,10 +522,10 @@ pub fn do_oscore_test() -> Result<(), &'static str> {
 
     let mut primitive = liboscore::PrimitiveContext::new_from_fresh_material(immutables);
 
-    let mut msg = coap_message::heapmessage::HeapMessage::new();
+    let mut msg = coap_message_implementations::heap::HeapMessage::new();
     let oscopt = b"\x09\x00";
-    msg.add_option(9, oscopt);
-    msg.set_payload(b"\x5c\x94\xc1\x29\x80\xfd\x93\x68\x4f\x37\x1e\xb2\xf5\x25\xa2\x69\x3b\x47\x4d\x5e\x37\x16\x45\x67\x63\x74\xe6\x8d\x4c\x20\x4a\xdb");
+    msg.add_option(9, oscopt).unwrap();
+    msg.set_payload(b"\x5c\x94\xc1\x29\x80\xfd\x93\x68\x4f\x37\x1e\xb2\xf5\x25\xa2\x69\x3b\x47\x4d\x5e\x37\x16\x45\x67\x63\x74\xe6\x8d\x4c\x20\x4a\xdb").unwrap();
 
     liboscore_msgbackend::with_heapmessage_as_msg_native(msg, |msg| {
         unsafe {

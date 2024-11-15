@@ -16,6 +16,7 @@
 //! [coap_gatt_utils] module. In fact, this module might move in there over time.
 
 use coap_handler::Handler;
+use coap_message::error::RenderableOnMinimal;
 use coap_message::MinimalWritableMessage;
 
 /// State held inside a single connection
@@ -97,7 +98,7 @@ impl Connection {
             None => None,
         };
 
-        let vec07: heapless07::Vec<u8, 400> = if let Some(oscore_option) = oscore_option {
+        let vec: heapless::Vec<u8, 400> = if let Some(oscore_option) = oscore_option {
             // Look it up, lock RS, or 5.03
             if let Some(mut rs) = self.rs.try_lock().ok() {
                 let mut context_app_claims = rs.look_up_context(&oscore_option);
@@ -133,7 +134,6 @@ impl Connection {
                             |response| {
                                 response.set_code(coap_numbers::code::BAD_REQUEST);
                                 // Could also set "Decryption failed"
-                                response.set_payload(b"");
                             },
                         ))
                         .expect("Conversion between heapless versions should not fail");
@@ -143,10 +143,19 @@ impl Connection {
 
                     coap_gatt_utils::write(|response| {
                         if liboscore::protect_response(
-                            response,
+                            &mut *response,
                             context,
                             &mut correlation,
-                            |response| handler.build_response(response, extracted),
+                            |response| {
+                                match extracted {
+                                    // FIXME: Handling write time errors properly would require
+                                    // unwinding, which the write signature doesn't allow us to do.
+                                    Ok(extracted) => handler
+                                        .build_response(response, extracted)
+                                        .expect("TODO handle errors"),
+                                    Err(e) => e.render(response).expect("TODO handle errors"),
+                                }
+                            },
                         )
                         .is_err()
                         {
@@ -157,7 +166,6 @@ impl Connection {
                             // we're producing an erroneous message at best (at worst the backend
                             // panics) because we already wrote options and payload.
                             response.set_code(coap_numbers::code::INTERNAL_SERVER_ERROR);
-                            response.set_payload(b"");
                         }
                     })
                 } else {
@@ -170,7 +178,9 @@ impl Connection {
                 // OSCORE request but the context is busy
                 coap_gatt_utils::write(|response| {
                     response.set_code(coap_numbers::code::SERVICE_UNAVAILABLE);
-                    response.add_option_uint(coap_numbers::option::MAX_AGE, 0u8);
+                    response
+                        .add_option_uint(coap_numbers::option::MAX_AGE, 0u8)
+                        .expect("Backend can set arbitrary options");
                 })
             }
         } else {
@@ -179,9 +189,19 @@ impl Connection {
 
             let extracted = handler.extract_request_data(&request);
 
-            coap_gatt_utils::write(|response| handler.build_response(response, extracted))
+            match extracted {
+                // FIXME Even though we call write from the outside, we'd at least have to cancel
+                // the write (which is currently not supported)
+                Ok(extracted) => coap_gatt_utils::write(|response| {
+                    handler
+                        .build_response(response, extracted)
+                        .expect("TODO handle errors")
+                }),
+                Err(e) => coap_gatt_utils::write(|response| {
+                    e.render(response).expect("TODO handle errors")
+                }),
+            }
         };
-        heapless::Vec::from_slice(&vec07)
-            .expect("Conversion between heapless versions should not fail")
+        vec
     }
 }
