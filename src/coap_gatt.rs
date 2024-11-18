@@ -179,6 +179,10 @@ impl Connection {
             defmt::info!("OSCORE request processed, building response...");
 
             coap_gatt_utils::write(|response| {
+                // Error handling here is a tad odd: our response has a `.reset()`, but libOSCORE
+                // doesn't have the API (in particular it can't rely on its backend to have a
+                // reset/rewind), so we have to do separate protect steps.
+
                 if liboscore::protect_response(
                     &mut *response,
                     context,
@@ -199,9 +203,8 @@ impl Connection {
                     // Practically, this means we're either out of sequence numbers (which
                     // was caught in the preparatory phase, and we can err out), or
                     // something in the crypto step went wrong (the only thing that comes
-                    // to mind is too long AAD, which can't practically happen), and then
-                    // we're producing an erroneous message at best (at worst the backend
-                    // panics) because we already wrote options and payload.
+                    // to mind is too long AAD, which can't practically happen)..
+                    response.reset();
                     response.set_code(coap_numbers::code::INTERNAL_SERVER_ERROR);
                 }
             })
