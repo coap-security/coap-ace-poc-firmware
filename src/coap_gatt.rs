@@ -98,98 +98,13 @@ impl Connection {
             None => None,
         };
 
-        let vec: heapless::Vec<u8, 400> = if let Some(oscore_option) = oscore_option {
-            // Look it up, lock RS, or 5.03
-            if let Some(mut rs) = self.rs.try_lock().ok() {
-                let mut context_app_claims = rs.look_up_context(&oscore_option);
-
-                if context_app_claims.as_ref().map(|(_, ac)| ac.valid()) == Some(false) {
-                    // Not removing them from the RS: they'll age out anyway
-                    context_app_claims = None;
-                }
-
-                if let Some((context, app_claims)) = context_app_claims {
-                    defmt::info!(
-                        "OSCORE option indicated KID {:?}, found key with claims {:?}",
-                        oscore_option.kid(),
-                        &app_claims
-                    );
-
-                    // The self.rs will actually be locked, because we hold it through `rs` which
-                    // goes into the &mut OSCORE context. An advanced version that supports token
-                    // upgrades might, rather than passing in a runtime-optional RS, an Either that
-                    // can bea &mut to a slot inside the RS that can be upgraded, or an RS through
-                    // which something new can be added.
-                    let mut handler = self.chf.build(Some(app_claims), &mut self.rs);
-
-                    let Ok((mut correlation, extracted)) = liboscore::unprotect_request(
-                        &mut request,
-                        oscore_option,
-                        context,
-                        |request| handler.extract_request_data(request),
-                    ) else {
-                        defmt::error!("OSCORE request could not be unprotected");
-
-                        return heapless::Vec::from_slice(&coap_gatt_utils::write::<400>(
-                            |response| {
-                                response.set_code(coap_numbers::code::BAD_REQUEST);
-                                // Could also set "Decryption failed"
-                            },
-                        ))
-                        .expect("Conversion between heapless versions should not fail");
-                    };
-
-                    defmt::info!("OSCORE request processed, building response...");
-
-                    coap_gatt_utils::write(|response| {
-                        if liboscore::protect_response(
-                            &mut *response,
-                            context,
-                            &mut correlation,
-                            |response| {
-                                match extracted {
-                                    // FIXME: Handling write time errors properly would require
-                                    // unwinding, which the write signature doesn't allow us to do.
-                                    Ok(extracted) => handler
-                                        .build_response(response, extracted)
-                                        .expect("TODO handle errors"),
-                                    Err(e) => e.render(response).expect("TODO handle errors"),
-                                }
-                            },
-                        )
-                        .is_err()
-                        {
-                            // Practically, this means we're either out of sequence numbers (which
-                            // was caught in the preparatory phase, and we can err out), or
-                            // something in the crypto step went wrong (the only thing that comes
-                            // to mind is too long AAD, which can't practically happen), and then
-                            // we're producing an erroneous message at best (at worst the backend
-                            // panics) because we already wrote options and payload.
-                            response.set_code(coap_numbers::code::INTERNAL_SERVER_ERROR);
-                        }
-                    })
-                } else {
-                    coap_gatt_utils::write(|response| {
-                        response.set_code(coap_numbers::code::UNAUTHORIZED);
-                        // Could set payload "Security context not found"
-                    })
-                }
-            } else {
-                // OSCORE request but the context is busy
-                coap_gatt_utils::write(|response| {
-                    response.set_code(coap_numbers::code::SERVICE_UNAVAILABLE);
-                    response
-                        .add_option_uint(coap_numbers::option::MAX_AGE, 0u8)
-                        .expect("Backend can set arbitrary options");
-                })
-            }
-        } else {
+        let Some(oscore_option) = oscore_option else {
             // Unprotected requests never have credentials
             let mut handler = self.chf.build(None, &mut self.rs);
 
             let extracted = handler.extract_request_data(&request);
 
-            match extracted {
+            return match extracted {
                 // FIXME Even though we call write from the outside, we'd at least have to cancel
                 // the write (which is currently not supported)
                 Ok(extracted) => coap_gatt_utils::write(|response| {
@@ -200,8 +115,89 @@ impl Connection {
                 Err(e) => coap_gatt_utils::write(|response| {
                     e.render(response).expect("TODO handle errors")
                 }),
-            }
+            };
         };
-        vec
+
+        // Look it up, lock RS, or 5.03
+        let Some(mut rs) = self.rs.try_lock().ok() else {
+            // OSCORE request but the context is busy
+            return coap_gatt_utils::write(|response| {
+                response.set_code(coap_numbers::code::SERVICE_UNAVAILABLE);
+                response
+                    .add_option_uint(coap_numbers::option::MAX_AGE, 0u8)
+                    .expect("Backend can set arbitrary options");
+            });
+        };
+
+        let mut context_app_claims = rs.look_up_context(&oscore_option);
+
+        if context_app_claims.as_ref().map(|(_, ac)| ac.valid()) == Some(false) {
+            // Not removing them from the RS: they'll age out anyway
+            context_app_claims = None;
+        }
+
+        if let Some((context, app_claims)) = context_app_claims {
+            defmt::info!(
+                "OSCORE option indicated KID {:?}, found key with claims {:?}",
+                oscore_option.kid(),
+                &app_claims
+            );
+
+            // The self.rs will actually be locked, because we hold it through `rs` which
+            // goes into the &mut OSCORE context. An advanced version that supports token
+            // upgrades might, rather than passing in a runtime-optional RS, an Either that
+            // can bea &mut to a slot inside the RS that can be upgraded, or an RS through
+            // which something new can be added.
+            let mut handler = self.chf.build(Some(app_claims), &mut self.rs);
+
+            let Ok((mut correlation, extracted)) =
+                liboscore::unprotect_request(&mut request, oscore_option, context, |request| {
+                    handler.extract_request_data(request)
+                })
+            else {
+                defmt::error!("OSCORE request could not be unprotected");
+
+                return heapless::Vec::from_slice(&coap_gatt_utils::write::<400>(|response| {
+                    response.set_code(coap_numbers::code::BAD_REQUEST);
+                    // Could also set "Decryption failed"
+                }))
+                .expect("Conversion between heapless versions should not fail");
+            };
+
+            defmt::info!("OSCORE request processed, building response...");
+
+            coap_gatt_utils::write(|response| {
+                if liboscore::protect_response(
+                    &mut *response,
+                    context,
+                    &mut correlation,
+                    |response| {
+                        match extracted {
+                            // FIXME: Handling write time errors properly would require
+                            // unwinding, which the write signature doesn't allow us to do.
+                            Ok(extracted) => handler
+                                .build_response(response, extracted)
+                                .expect("TODO handle errors"),
+                            Err(e) => e.render(response).expect("TODO handle errors"),
+                        }
+                    },
+                )
+                .is_err()
+                {
+                    // Practically, this means we're either out of sequence numbers (which
+                    // was caught in the preparatory phase, and we can err out), or
+                    // something in the crypto step went wrong (the only thing that comes
+                    // to mind is too long AAD, which can't practically happen), and then
+                    // we're producing an erroneous message at best (at worst the backend
+                    // panics) because we already wrote options and payload.
+                    response.set_code(coap_numbers::code::INTERNAL_SERVER_ERROR);
+                }
+            })
+        } else {
+            coap_gatt_utils::write(|response| {
+                response.set_code(coap_numbers::code::UNAUTHORIZED);
+                // Could set payload "Security context not found"
+            })
+        }
     }
 }
