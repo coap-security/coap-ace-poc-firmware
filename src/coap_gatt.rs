@@ -104,18 +104,30 @@ impl Connection {
 
             let extracted = handler.extract_request_data(&request);
 
-            return match extracted {
-                // FIXME Even though we call write from the outside, we'd at least have to cancel
-                // the write (which is currently not supported)
-                Ok(extracted) => coap_gatt_utils::write(|response| {
-                    handler
-                        .build_response(response, extracted)
-                        .expect("TODO handle errors")
-                }),
-                Err(e) => coap_gatt_utils::write(|response| {
-                    e.render(response).expect("TODO handle errors")
-                }),
-            };
+            return coap_gatt_utils::write(|response| match extracted {
+                Ok(extracted) => match handler.build_response(response, extracted) {
+                    Ok(()) => (),
+                    Err(e) => {
+                        response.reset();
+                        match e.render(response) {
+                            Ok(()) => (),
+                            Err(_) => {
+                                defmt::error!("Plain CoAP render error failed to render");
+                                response.reset();
+                                response.set_code(coap_numbers::code::INTERNAL_SERVER_ERROR);
+                            }
+                        }
+                    }
+                },
+                Err(e) => match e.render(response) {
+                    Ok(()) => (),
+                    Err(_) => {
+                        defmt::error!("Plain CoAP extraction error failed to render");
+                        response.reset();
+                        response.set_code(coap_numbers::code::INTERNAL_SERVER_ERROR);
+                    }
+                },
+            });
         };
 
         // Look it up, lock RS, or 5.03
