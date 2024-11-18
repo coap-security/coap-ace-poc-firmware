@@ -148,71 +148,66 @@ impl Connection {
             context_app_claims = None;
         }
 
-        if let Some((context, app_claims)) = context_app_claims {
-            defmt::info!(
-                "OSCORE option indicated KID {:?}, found key with claims {:?}",
-                oscore_option.kid(),
-                &app_claims
-            );
-
-            // The self.rs will actually be locked, because we hold it through `rs` which
-            // goes into the &mut OSCORE context. An advanced version that supports token
-            // upgrades might, rather than passing in a runtime-optional RS, an Either that
-            // can bea &mut to a slot inside the RS that can be upgraded, or an RS through
-            // which something new can be added.
-            let mut handler = self.chf.build(Some(app_claims), &mut self.rs);
-
-            let Ok((mut correlation, extracted)) =
-                liboscore::unprotect_request(&mut request, oscore_option, context, |request| {
-                    handler.extract_request_data(request)
-                })
-            else {
-                defmt::error!("OSCORE request could not be unprotected");
-
-                return heapless::Vec::from_slice(&coap_gatt_utils::write::<400>(|response| {
-                    response.set_code(coap_numbers::code::BAD_REQUEST);
-                    // Could also set "Decryption failed"
-                }))
-                .expect("Conversion between heapless versions should not fail");
-            };
-
-            defmt::info!("OSCORE request processed, building response...");
-
-            coap_gatt_utils::write(|response| {
-                // Error handling here is a tad odd: our response has a `.reset()`, but libOSCORE
-                // doesn't have the API (in particular it can't rely on its backend to have a
-                // reset/rewind), so we have to do separate protect steps.
-
-                if liboscore::protect_response(
-                    &mut *response,
-                    context,
-                    &mut correlation,
-                    |response| {
-                        match extracted {
-                            // FIXME: Handling write time errors properly would require
-                            // unwinding, which the write signature doesn't allow us to do.
-                            Ok(extracted) => handler
-                                .build_response(response, extracted)
-                                .expect("TODO handle errors"),
-                            Err(e) => e.render(response).expect("TODO handle errors"),
-                        }
-                    },
-                )
-                .is_err()
-                {
-                    // Practically, this means we're either out of sequence numbers (which
-                    // was caught in the preparatory phase, and we can err out), or
-                    // something in the crypto step went wrong (the only thing that comes
-                    // to mind is too long AAD, which can't practically happen)..
-                    response.reset();
-                    response.set_code(coap_numbers::code::INTERNAL_SERVER_ERROR);
-                }
-            })
-        } else {
-            coap_gatt_utils::write(|response| {
+        let Some((context, app_claims)) = context_app_claims else {
+            return coap_gatt_utils::write(|response| {
                 response.set_code(coap_numbers::code::UNAUTHORIZED);
                 // Could set payload "Security context not found"
+            });
+        };
+
+        defmt::info!(
+            "OSCORE option indicated KID {:?}, found key with claims {:?}",
+            oscore_option.kid(),
+            &app_claims
+        );
+
+        // The self.rs will actually be locked, because we hold it through `rs` which
+        // goes into the &mut OSCORE context. An advanced version that supports token
+        // upgrades might, rather than passing in a runtime-optional RS, an Either that
+        // can bea &mut to a slot inside the RS that can be upgraded, or an RS through
+        // which something new can be added.
+        let mut handler = self.chf.build(Some(app_claims), &mut self.rs);
+
+        let Ok((mut correlation, extracted)) =
+            liboscore::unprotect_request(&mut request, oscore_option, context, |request| {
+                handler.extract_request_data(request)
             })
-        }
+        else {
+            defmt::error!("OSCORE request could not be unprotected");
+
+            return heapless::Vec::from_slice(&coap_gatt_utils::write::<400>(|response| {
+                response.set_code(coap_numbers::code::BAD_REQUEST);
+                // Could also set "Decryption failed"
+            }))
+            .expect("Conversion between heapless versions should not fail");
+        };
+
+        defmt::info!("OSCORE request processed, building response...");
+
+        coap_gatt_utils::write(|response| {
+            // Error handling here is a tad odd: our response has a `.reset()`, but libOSCORE
+            // doesn't have the API (in particular it can't rely on its backend to have a
+            // reset/rewind), so we have to do separate protect steps.
+
+            if liboscore::protect_response(&mut *response, context, &mut correlation, |response| {
+                match extracted {
+                    // FIXME: Handling write time errors properly would require
+                    // unwinding, which the write signature doesn't allow us to do.
+                    Ok(extracted) => handler
+                        .build_response(response, extracted)
+                        .expect("TODO handle errors"),
+                    Err(e) => e.render(response).expect("TODO handle errors"),
+                }
+            })
+            .is_err()
+            {
+                // Practically, this means we're either out of sequence numbers (which
+                // was caught in the preparatory phase, and we can err out), or
+                // something in the crypto step went wrong (the only thing that comes
+                // to mind is too long AAD, which can't practically happen)..
+                response.reset();
+                response.set_code(coap_numbers::code::INTERNAL_SERVER_ERROR);
+            }
+        })
     }
 }
