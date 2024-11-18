@@ -188,19 +188,92 @@ impl Connection {
             // Error handling here is a tad odd: our response has a `.reset()`, but libOSCORE
             // doesn't have the API (in particular it can't rely on its backend to have a
             // reset/rewind), so we have to do separate protect steps.
+            //
+            // At the same time, we have to do everything in a single .reset()able
+            // coap_gatt_utils::write, because the lifetimes of the errors unfortunately may be
+            // bound to its buffer.
+            //
+            // This makes this whole mess even more arcane and verbose than is already generally
+            // the trouble with writing servers for coap-handler 0.2.
 
-            if liboscore::protect_response(&mut *response, context, &mut correlation, |response| {
-                match extracted {
-                    // FIXME: Handling write time errors properly would require
-                    // unwinding, which the write signature doesn't allow us to do.
-                    Ok(extracted) => handler
-                        .build_response(response, extracted)
-                        .expect("TODO handle errors"),
-                    Err(e) => e.render(response).expect("TODO handle errors"),
+            let protected = match extracted {
+                Ok(extracted) => {
+                    let rendered = liboscore::protect_response(
+                        &mut *response,
+                        context,
+                        &mut correlation,
+                        |response| handler.build_response(response, extracted),
+                    );
+
+                    match rendered {
+                        // Protect call failed
+                        Err(e) => Err(e),
+                        Ok(Ok(())) => Ok(()),
+                        Ok(Err(e)) => {
+                            response.reset();
+                            let rendered = liboscore::protect_response(
+                                &mut *response,
+                                context,
+                                &mut correlation,
+                                |response| e.render(response),
+                            );
+
+                            match rendered {
+                                // Protect call failed
+                                Err(e) => Err(e),
+                                Ok(Ok(())) => Ok(()),
+                                Ok(Err(_)) => {
+                                    defmt::error!(
+                                        "Protected CoAP response building error failed to render"
+                                    );
+                                    response.reset();
+                                    liboscore::protect_response(
+                                        &mut *response,
+                                        context,
+                                        &mut correlation,
+                                        |response| {
+                                            response
+                                                .set_code(coap_numbers::code::INTERNAL_SERVER_ERROR)
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
-            })
-            .is_err()
-            {
+                Err(e) => {
+                    let rendered = liboscore::protect_response(
+                        &mut *response,
+                        context,
+                        &mut correlation,
+                        |response| e.render(response),
+                    );
+
+                    match rendered {
+                        // Protect call failed
+                        Err(e) => Err(e),
+                        Ok(Ok(())) => Ok(()),
+                        Ok(Err(_)) => {
+                            defmt::error!("Protected CoAP extraction error failed to render");
+                            response.reset();
+                            liboscore::protect_response(
+                                &mut *response,
+                                context,
+                                &mut correlation,
+                                |response| {
+                                    response.set_code(coap_numbers::code::INTERNAL_SERVER_ERROR)
+                                },
+                            )
+                        }
+                    }
+                }
+            };
+
+            // That we take this way out of this function also helps make sure that all branches go
+            // through an OSCORE protect step -- as they need to, because we can't leak data about
+            // failures other than size and timing.
+
+            if protected.is_err() {
                 // Practically, this means we're either out of sequence numbers (which
                 // was caught in the preparatory phase, and we can err out), or
                 // something in the crypto step went wrong (the only thing that comes

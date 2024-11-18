@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # (Same license applies as this is generated from Cargo.toml and database information)
 # See README for all details on copyright, authorship and license.
-version = 3
+version = 4
 
 [[package]]
 name = "Inflector"
@@ -1328,8 +1328,7 @@ dependencies = [
 [[package]]
 name = "liboscore"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cba477e0645ccf00fefdde8450d936b2ce572772299b4f8f62738aa3e342d35d"
+source = "git+https://gitlab.com/oscore/liboscore.git?rev=039ccef7#039ccef7e334d77be5ee7888d73b4019b58c1b74"
 dependencies = [
  "bindgen",
  "cbindgen",
@@ -1345,8 +1344,7 @@ dependencies = [
 [[package]]
 name = "liboscore-cryptobackend"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4edc5726efe9477170f43d9973546f51c0d284690da5cc629a11172195ebe165"
+source = "git+https://gitlab.com/oscore/liboscore.git?rev=039ccef7#039ccef7e334d77be5ee7888d73b4019b58c1b74"
 dependencies = [
  "aead",
  "aes",
@@ -1364,8 +1362,7 @@ dependencies = [
 [[package]]
 name = "liboscore-msgbackend"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "752e2ae90384a81d2c80bae0742acd7ad50b97a1f3b66d060d260417c9bd9640"
+source = "git+https://gitlab.com/oscore/liboscore.git?rev=039ccef7#039ccef7e334d77be5ee7888d73b4019b58c1b74"
 dependencies = [
  "coap-message",
  "coap-message-implementations",
