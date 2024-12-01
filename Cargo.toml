@@ -73,7 +73,7 @@ rand_core = "0.6"
 dcaf = { version = "^0.3", default-features = false }
 coset = { version = "^0.3", default-features = false }
 
-embedded-alloc = "0.5"
+embedded-alloc = "0.6"
 # Needed to introspect ClaimsSet.rest
 ciborium = { version = "0.2", default-features = false }
 
