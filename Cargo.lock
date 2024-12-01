@@ -676,9 +676,9 @@ dependencies = [
 
 [[package]]
 name = "defmt"
-version = "0.3.5"
+version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8a2d011b2fee29fb7d659b83c43fce9a2cb4df453e16d441a51448e448f3f98"
+checksum = "a99dd22262668b887121d4672af5a64b238f026099f1a2a1b322066c9ecfe9e0"
 dependencies = [
  "bitflags 1.3.2",
  "defmt-macros",
@@ -1327,8 +1327,8 @@ dependencies = [
 
 [[package]]
 name = "liboscore"
-version = "0.2.0"
-source = "git+https://gitlab.com/oscore/liboscore.git?rev=039ccef7#039ccef7e334d77be5ee7888d73b4019b58c1b74"
+version = "0.2.1"
+source = "git+https://gitlab.com/oscore/liboscore.git?rev=29770db9#29770db95c2435c9447c398c92130c7236f50b74"
 dependencies = [
  "bindgen",
  "cbindgen",
@@ -1343,8 +1343,8 @@ dependencies = [
 
 [[package]]
 name = "liboscore-cryptobackend"
-version = "0.2.0"
-source = "git+https://gitlab.com/oscore/liboscore.git?rev=039ccef7#039ccef7e334d77be5ee7888d73b4019b58c1b74"
+version = "0.2.1"
+source = "git+https://gitlab.com/oscore/liboscore.git?rev=29770db9#29770db95c2435c9447c398c92130c7236f50b74"
 dependencies = [
  "aead",
  "aes",
@@ -1361,8 +1361,8 @@ dependencies = [
 
 [[package]]
 name = "liboscore-msgbackend"
-version = "0.2.0"
-source = "git+https://gitlab.com/oscore/liboscore.git?rev=039ccef7#039ccef7e334d77be5ee7888d73b4019b58c1b74"
+version = "0.2.1"
+source = "git+https://gitlab.com/oscore/liboscore.git?rev=29770db9#29770db95c2435c9447c398c92130c7236f50b74"
 dependencies = [
  "coap-message",
  "coap-message-implementations",

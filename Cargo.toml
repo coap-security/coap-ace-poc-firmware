@@ -108,7 +108,7 @@ nrf-softdevice-s132 = { git = "https://github.com/embassy-rs/nrf-softdevice", re
 coset = { git = "https://github.com/chrysn-pull-requests/coset", branch = "oscore" }
 dcaf = { git = "https://github.com/chrysn-pull-requests/dcaf-rs", branch = "oscore" }
 
-# avoiding https://gitlab.com/oscore/liboscore/-/merge_requests/10
-liboscore = { git = "https://gitlab.com/oscore/liboscore.git", rev = "b0158334" }
-liboscore-msgbackend = { git = "https://gitlab.com/oscore/liboscore.git", rev = "b0158334" }
-liboscore-cryptobackend = { git = "https://gitlab.com/oscore/liboscore.git", rev = "b0158334" }
+# 0.2.1
+liboscore = { git = "https://gitlab.com/oscore/liboscore.git", rev = "29770db9" }
+liboscore-msgbackend = { git = "https://gitlab.com/oscore/liboscore.git", rev = "29770db9" }
+liboscore-cryptobackend = { git = "https://gitlab.com/oscore/liboscore.git", rev = "29770db9" }
