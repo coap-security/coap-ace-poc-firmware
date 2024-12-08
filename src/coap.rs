@@ -286,16 +286,6 @@ pub fn create_coap_handler(
     // improved MutableWritableMessage, or better bounds on CBOR serialization size)
     let time_handler = coap_handler_implementations::TypeHandler::new_minicbor(Time);
 
-    let authzinfo_handler =
-        ace_oscore_helpers::resourceserver::UnprotectedAuthzInfoEndpoint::new(|| {
-            rs.try_lock().ok()
-        });
-    // FIXME should be provided by UnprotectedAuthzInfoEndpoint
-    let authzinfo_handler = coap_handler_implementations::wkc::ConstantSingleRecordReport::new(
-        authzinfo_handler,
-        &[coap_handler::Attribute::ResourceType("ace.ai")],
-    );
-
     let identify_handler = WithPermissions {
         handler: Identify(leds),
         permissions: claims.map(|c| c.scope.identify).unwrap_or(0),
@@ -335,8 +325,6 @@ pub fn create_coap_handler(
     coap_handler_implementations::new_dispatcher()
         // Fully unprotected in the demo only
         .at(&["time"], time_handler)
-        // Fully unprotected by design
-        .at(&["authz-info"], authzinfo_handler)
         // FIXME: Go through OSCORE
         .at(&["leds"], leds_handler)
         .at(&["temp"], temperature_handler)

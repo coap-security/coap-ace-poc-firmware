@@ -10,6 +10,10 @@ struct Config<'a> {
     audience: &'a str,
     as_uri: &'a str,
     key: &'a str,
+
+    edhoc_x: &'a str,
+    edhoc_y: &'a str,
+    edhoc_q: &'a str,
 }
 
 fn main() {
@@ -24,6 +28,8 @@ fn main() {
     let config_outfile = Path::new(&std::env::var("OUT_DIR").unwrap()).join("rs_as_association.rs");
     let mut config_outfile =
         std::fs::File::create(config_outfile).expect("Config outfile needs to be writable");
+    // Assigning them static / no_mangle / through a black_box merely serves to make them easier to
+    // spot and maybe change them in firmware images.
     write!(
         config_outfile,
         "{{
@@ -35,14 +41,27 @@ fn main() {
             static AS_URI: &str = &{:?};
             #[no_mangle]
             static KEY: [u8; 32] = {:?};
-            ace_oscore_helpers::resourceserver::RsAsSharedData {{
+            let rs_as = ace_oscore_helpers::resourceserver::RsAsSharedData {{
                 issuer: Some(*core::hint::black_box(&ISSUER)),
                 audience: *core::hint::black_box(&AUDIENCE),
                 as_uri: *core::hint::black_box(&AS_URI),
                 key: aead::generic_array::GenericArray::clone_from_slice(core::hint::black_box(&KEY)),
-            }}
+            }};
+
+            let coapcore_config = AdhocCoapcoreConfig {{
+                as_symmetric: Some(&KEY),
+                edhoc_x: Some({:?}),
+                edhoc_y: Some({:?}),
+                edhoc_q: Some({:?}),
+                as_pub: None,
+            }};
+
+            (rs_as, coapcore_config)
         }}",
         config.issuer, config.audience, config.as_uri, key,
+        hex::decode(config.edhoc_x).expect("Config edhoc_x should be hex"),
+        hex::decode(config.edhoc_y).expect("Config edhoc_y should be hex"),
+        hex::decode(config.edhoc_q).expect("Config edhoc_q should be hex"),
     )
     .unwrap();
 

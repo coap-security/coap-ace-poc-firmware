@@ -127,6 +127,7 @@ async fn softdevice_task(sd: &'static Softdevice) {
     sd.run().await;
 }
 
+#[derive(Copy, Clone)]
 struct SdRandomness(&'static Softdevice);
 
 // The embassy-nrf::rng::Rng would be an alternative here, but its new() function is so scarily
@@ -150,6 +151,24 @@ impl rand_core::RngCore for SdRandomness {
         self.fill_bytes(&mut buf);
         u64::from_be_bytes(buf)
     }
+}
+
+// nrf_softdevice::random_bytes is advertised as cryptographically secure
+impl rand_core::CryptoRng for SdRandomness {}
+
+pub(crate) struct AdhocCoapcoreConfig {
+    pub as_symmetric: Option<&'static [u8; 32]>,
+
+    pub edhoc_x: Option<[u8; 32]>,
+    pub edhoc_y: Option<[u8; 32]>,
+    pub edhoc_q: Option<[u8; 32]>,
+
+    pub as_pub: Option<[u8; 32]>,
+}
+
+pub(crate) struct AdhocCoapcoreConfig2 {
+    core: AdhocCoapcoreConfig,
+    rand: SdRandomness,
 }
 
 // None of our current users take these as actual UUIDs...
@@ -207,8 +226,9 @@ async fn blueworker(
     conn: nrf_softdevice::ble::Connection,
     chf: &'static CoapHandlerFactory,
     rs: &'static Rs,
+    coapcore_config: &'static AdhocCoapcoreConfig2,
 ) {
-    let mut cg = coap_gatt::Connection::new(chf, rs);
+    let mut cg = coap_gatt::Connection::new(chf, rs, coapcore_config);
 
     info!("Running new BLE connection");
     gatt_server::run(&conn, server, |e| match e {
@@ -249,6 +269,7 @@ async fn bluetooth_task(
     spawner: Spawner,
     chf: &'static CoapHandlerFactory,
     rs: &'static Rs,
+    coapcore_config: &'static AdhocCoapcoreConfig2,
 ) {
     #[rustfmt::skip]
     let adv_data = &[
@@ -304,7 +325,7 @@ async fn bluetooth_task(
             }
         };
 
-        if let Err(_) = spawner.spawn(blueworker(server, conn, chf, rs)) {
+        if let Err(_) = spawner.spawn(blueworker(server, conn, chf, rs, coapcore_config)) {
             // Counting should make sure this never happens, but it's a bit racy.
             warn!("Spawn failure, dropping conn right away");
             USED_CONNECTIONS.fetch_sub(1, core::sync::atomic::Ordering::SeqCst);
@@ -378,10 +399,9 @@ fn outer_main() -> ! {
 fn main() -> ! {
     info!("Device is starting up...");
 
-    log_to_defmt::setup();
-
     use ace_oscore_helpers::aead;
-    let rs_as_association = include!(concat!(env!("OUT_DIR"), "/rs_as_association.rs"));
+    let (rs_as_association, coapcore_config) =
+        include!(concat!(env!("OUT_DIR"), "/rs_as_association.rs"));
 
     let mut full_name = heapless::String::<20>::new();
     full_name.push_str("CoAP-ACE demo #").unwrap();
@@ -470,6 +490,14 @@ fn main() -> ! {
         ResourceServer::new_with_association_and_randomness(rs_as_association, SdRandomness(sd)),
     ));
 
+    let coapcore_config = AdhocCoapcoreConfig2 {
+        core: coapcore_config,
+        rand: SdRandomness(sd),
+    };
+    static COAPCORE_CONFIG: static_cell::StaticCell<AdhocCoapcoreConfig2> =
+        static_cell::StaticCell::new();
+    let coapcore_config = COAPCORE_CONFIG.init(coapcore_config);
+
     executor.run(move |spawner| {
         let leds: &'static blink::Leds = LEDS.init(blink::Leds::new(spawner, leds));
         leds.set_idle(2);
@@ -483,7 +511,8 @@ fn main() -> ! {
             scan_data,
             spawner,
             coap_handler_factory,
-            rs
+            rs,
+            coapcore_config
         )));
         info!(
             "Device is ready at {}.",
@@ -493,83 +522,7 @@ fn main() -> ! {
         // Initializing this only late to ensure that nothing of the "regular" things depends on
         // having a heap; this is only for dcaf / coset as they work with ciborium
         unsafe { alloc::init() };
-
-        // Of course they go *after* alloc init: they're based on heap CoAP messages :-)
-        unwrap!(do_oscore_test());
-        info!("OSCORE tests passed");
     });
-}
-
-/// Run a piece of the libOSCORE plug test suite.
-pub fn do_oscore_test() -> Result<(), &'static str> {
-    use core::mem::MaybeUninit;
-
-    use coap_message::{MessageOption, MinimalWritableMessage, ReadableMessage};
-
-    use liboscore::raw;
-
-    // From OSCORE plug test, security context A
-    let immutables = liboscore::PrimitiveImmutables::derive(
-        liboscore::HkdfAlg::from_number(5).unwrap(),
-        b"\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10",
-        b"\x9e\x7c\xa9\x22\x23\x78\x63\x40",
-        None,
-        liboscore::AeadAlg::from_number(24).unwrap(),
-        b"\x01",
-        b"",
-    )
-    .unwrap();
-
-    let mut primitive = liboscore::PrimitiveContext::new_from_fresh_material(immutables);
-
-    let mut msg = coap_message_implementations::heap::HeapMessage::new();
-    let oscopt = b"\x09\x00";
-    msg.add_option(9, oscopt).unwrap();
-    msg.set_payload(b"\x5c\x94\xc1\x29\x80\xfd\x93\x68\x4f\x37\x1e\xb2\xf5\x25\xa2\x69\x3b\x47\x4d\x5e\x37\x16\x45\x67\x63\x74\xe6\x8d\x4c\x20\x4a\xdb").unwrap();
-
-    liboscore_msgbackend::with_heapmessage_as_msg_native(msg, |msg| {
-        unsafe {
-            let header = liboscore::OscoreOption::parse(oscopt).unwrap();
-
-            let mut unprotected = MaybeUninit::uninit();
-            let mut request_id = MaybeUninit::uninit();
-            let ret = raw::oscore_unprotect_request(
-                msg,
-                unprotected.as_mut_ptr(),
-                &mut header.into_inner(),
-                primitive.as_mut(),
-                request_id.as_mut_ptr(),
-            );
-            assert!(ret == raw::oscore_unprotect_request_result_OSCORE_UNPROTECT_REQUEST_OK);
-            let unprotected = unprotected.assume_init();
-
-            let unprotected = liboscore::ProtectedMessage::new(unprotected);
-            assert!(unprotected.code() == 1);
-
-            let mut message_options = unprotected.options().fuse();
-            let mut ref_options = [(11, "oscore"), (11, "hello"), (11, "1")]
-                .into_iter()
-                .fuse();
-            for (msg_o, ref_o) in (&mut message_options).zip(&mut ref_options) {
-                assert!(msg_o.number() == ref_o.0);
-                assert!(msg_o.value() == ref_o.1.as_bytes());
-            }
-            assert!(
-                message_options.next().is_none(),
-                "Message contained extra options"
-            );
-            assert!(
-                ref_options.next().is_none(),
-                "Message didn't contain the reference options"
-            );
-            assert!(unprotected.payload() == b"");
-        };
-    });
-
-    // We've taken a *mut of it, let's make sure it lives to the end
-    drop(primitive);
-
-    Ok(())
 }
 
 #[no_mangle]

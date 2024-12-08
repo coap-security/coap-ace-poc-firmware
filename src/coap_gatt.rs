@@ -55,12 +55,21 @@ pub struct Connection {
     chf: &'static crate::CoapHandlerFactory,
     /// An accessor to a ResourceServer
     rs: &'static crate::Rs,
+    coapcore_config: &'static super::AdhocCoapcoreConfig2,
 }
 
 // This will do more once a future version of CoAP-over-GATT is used
 impl Connection {
-    pub fn new(chf: &'static crate::CoapHandlerFactory, rs: &'static crate::Rs) -> Self {
-        Self { chf, rs }
+    pub fn new(
+        chf: &'static crate::CoapHandlerFactory,
+        rs: &'static crate::Rs,
+        coapcore_config: &'static super::AdhocCoapcoreConfig2,
+    ) -> Self {
+        Self {
+            chf,
+            rs,
+            coapcore_config,
+        }
     }
 
     /// Call this whenever a BLE write arrives. The response value is what any BLE read should
@@ -69,120 +78,38 @@ impl Connection {
     /// Note that this passes in data that is primarily supposed to be read as `&mut`. This is to
     /// later allow OSCORE decryption in-place.
     pub fn write(&mut self, written: &mut [u8]) -> heapless::Vec<u8, { crate::MAX_MESSAGE_LEN }> {
-        let mut request = coap_gatt_utils::parse_mut(written).unwrap();
+        let request = coap_gatt_utils::parse_mut(written).unwrap();
 
-        use coap_message::{MessageOption, ReadableMessage};
-        // FIXME: We need to copy things out because ReadableMessage by design only hands out
-        // short-lived values (so they can be built in the iterator if need be)
-        let mut oscore_option: Option<heapless::Vec<u8, 16>> = None;
-        for o in request.options() {
-            if o.number() == coap_numbers::option::OSCORE {
-                oscore_option = o
-                    .value()
-                    .try_into()
-                    .map_err(|e| {
-                        defmt::error!("OSCORE option is too long");
-                        e
-                    })
-                    .ok();
-                break;
-            }
-        }
-        let oscore_option = match &oscore_option {
-            Some(o) => liboscore::OscoreOption::parse(&o)
-                .map_err(|e| {
-                    defmt::error!("OSCORE option found but parsing failed");
-                    e
-                })
-                .ok(),
-            None => None,
-        };
+        // FIXME This block is constructing a KCCS out of a raw public key.
+        //
+        // move … somewhere (duplicated w/ webapp)
+        let mut credential = hex_literal::hex!("A1 0E A2 02 60 08 A1 01 A5 01 02 02 41 63 20 01 21 5820 7878787878787878787878787878787878787878787878787878787878787878 22 5820 7979797979797979797979797979797979797979797979797979797979797979");
+        credential[19..19 + 32]
+            .copy_from_slice(self.coapcore_config.core.edhoc_x.unwrap().as_slice());
+        credential[54..54 + 32]
+            .copy_from_slice(self.coapcore_config.core.edhoc_y.unwrap().as_slice());
+        let edhoc_q = self.coapcore_config.core.edhoc_q.unwrap();
+        defmt::info!("Built own credential as {:02x}", credential);
+        let credential = lakers::Credential::parse_ccs(&credential).unwrap();
 
-        let Some(oscore_option) = oscore_option else {
-            // Unprotected requests never have credentials
-            let mut handler = self.chf.build(None, &mut self.rs);
-
-            let extracted = handler.extract_request_data(&request);
-
-            return coap_gatt_utils::write(|response| match extracted {
-                Ok(extracted) => match handler.build_response(response, extracted) {
-                    Ok(()) => (),
-                    Err(e) => {
-                        response.reset();
-                        match e.render(response) {
-                            Ok(()) => (),
-                            Err(_) => {
-                                defmt::error!("Plain CoAP render error failed to render");
-                                response.reset();
-                                response.set_code(coap_numbers::code::INTERNAL_SERVER_ERROR);
-                            }
-                        }
-                    }
-                },
-                Err(e) => match e.render(response) {
-                    Ok(()) => (),
-                    Err(_) => {
-                        defmt::error!("Plain CoAP extraction error failed to render");
-                        response.reset();
-                        response.set_code(coap_numbers::code::INTERNAL_SERVER_ERROR);
-                    }
-                },
-            });
-        };
-
-        // Look it up, lock RS, or 5.03
-        let Some(mut rs) = self.rs.try_lock().ok() else {
-            // OSCORE request but the context is busy
-            return coap_gatt_utils::write(|response| {
-                response.set_code(coap_numbers::code::SERVICE_UNAVAILABLE);
-                response
-                    .add_option_uint(coap_numbers::option::MAX_AGE, 0u8)
-                    .expect("Backend can set arbitrary options");
-            });
-        };
-
-        let mut context_app_claims = rs.look_up_context(&oscore_option);
-
-        if context_app_claims.as_ref().map(|(_, ac)| ac.valid()) == Some(false) {
-            // Not removing them from the RS: they'll age out anyway
-            context_app_claims = None;
-        }
-
-        let Some((context, app_claims)) = context_app_claims else {
-            return coap_gatt_utils::write(|response| {
-                response.set_code(coap_numbers::code::UNAUTHORIZED);
-                // Could set payload "Security context not found"
-            });
-        };
-
-        defmt::info!(
-            "OSCORE option indicated KID {:?}, found key with claims {:?}",
-            oscore_option.kid(),
-            &app_claims
+        let our_as = coapcore::authorization_server::StaticSymmetric31::new(
+            self.coapcore_config
+                .core
+                .as_symmetric
+                .expect("FIXME: Add AS type for maybe-key"),
         );
 
-        // The self.rs will actually be locked, because we hold it through `rs` which
-        // goes into the &mut OSCORE context. An advanced version that supports token
-        // upgrades might, rather than passing in a runtime-optional RS, an Either that
-        // can bea &mut to a slot inside the RS that can be upgraded, or an RS through
-        // which something new can be added.
-        let mut handler = self.chf.build(Some(app_claims), &mut self.rs);
+        let mut handler = coapcore::seccontext::OscoreEdhocHandler::new(
+            (&credential, &edhoc_q),
+            self.chf.build(None, &mut self.rs),
+            || lakers_crypto_rustcrypto::Crypto::new(self.coapcore_config.rand.clone()),
+            self.coapcore_config.rand.clone(),
+        )
+        .with_authorization_server(our_as);
 
-        let Ok((mut correlation, extracted)) =
-            liboscore::unprotect_request(&mut request, oscore_option, context, |request| {
-                handler.extract_request_data(request)
-            })
-        else {
-            defmt::error!("OSCORE request could not be unprotected");
-
-            return heapless::Vec::from_slice(&coap_gatt_utils::write::<400>(|response| {
-                response.set_code(coap_numbers::code::BAD_REQUEST);
-                // Could also set "Decryption failed"
-            }))
-            .expect("Conversion between heapless versions should not fail");
-        };
-
-        defmt::info!("OSCORE request processed, building response...");
+        // We have a &mut, but can't tell the handler through the API; maybe an OscoreEdhocHandler
+        // should have something extra that takes a &mut parsed message?
+        let extracted = handler.extract_request_data(&request);
 
         coap_gatt_utils::write(|response| {
             // Error handling here is a tad odd: our response has a `.reset()`, but libOSCORE
@@ -196,91 +123,32 @@ impl Connection {
             // This makes this whole mess even more arcane and verbose than is already generally
             // the trouble with writing servers for coap-handler 0.2.
 
-            let protected = match extracted {
+            match extracted {
                 Ok(extracted) => {
-                    let rendered = liboscore::protect_response(
-                        &mut *response,
-                        context,
-                        &mut correlation,
-                        |response| handler.build_response(response, extracted),
-                    );
+                    let rendered = handler.build_response(response, extracted);
 
-                    match rendered {
-                        // Protect call failed
-                        Err(e) => Err(e),
-                        Ok(Ok(())) => Ok(()),
-                        Ok(Err(e)) => {
+                    if let Err(e) = rendered {
+                        response.reset();
+                        let rendered = e.render(response);
+
+                        if let Err(_) = rendered {
                             response.reset();
-                            let rendered = liboscore::protect_response(
-                                &mut *response,
-                                context,
-                                &mut correlation,
-                                |response| e.render(response),
-                            );
-
-                            match rendered {
-                                // Protect call failed
-                                Err(e) => Err(e),
-                                Ok(Ok(())) => Ok(()),
-                                Ok(Err(_)) => {
-                                    defmt::error!(
-                                        "Protected CoAP response building error failed to render"
-                                    );
-                                    response.reset();
-                                    liboscore::protect_response(
-                                        &mut *response,
-                                        context,
-                                        &mut correlation,
-                                        |response| {
-                                            response
-                                                .set_code(coap_numbers::code::INTERNAL_SERVER_ERROR)
-                                        },
-                                    )
-                                }
-                            }
+                            response.set_code(coap_numbers::code::INTERNAL_SERVER_ERROR);
                         }
                     }
                 }
                 Err(e) => {
-                    let rendered = liboscore::protect_response(
-                        &mut *response,
-                        context,
-                        &mut correlation,
-                        |response| e.render(response),
-                    );
+                    let rendered = e.render(response);
 
-                    match rendered {
-                        // Protect call failed
-                        Err(e) => Err(e),
-                        Ok(Ok(())) => Ok(()),
-                        Ok(Err(_)) => {
-                            defmt::error!("Protected CoAP extraction error failed to render");
-                            response.reset();
-                            liboscore::protect_response(
-                                &mut *response,
-                                context,
-                                &mut correlation,
-                                |response| {
-                                    response.set_code(coap_numbers::code::INTERNAL_SERVER_ERROR)
-                                },
-                            )
-                        }
+                    if let Err(_) = rendered {
+                        response.reset();
+                        response.set_code(coap_numbers::code::INTERNAL_SERVER_ERROR);
                     }
                 }
             };
 
-            // That we take this way out of this function also helps make sure that all branches go
-            // through an OSCORE protect step -- as they need to, because we can't leak data about
-            // failures other than size and timing.
-
-            if protected.is_err() {
-                // Practically, this means we're either out of sequence numbers (which
-                // was caught in the preparatory phase, and we can err out), or
-                // something in the crypto step went wrong (the only thing that comes
-                // to mind is too long AAD, which can't practically happen)..
-                response.reset();
-                response.set_code(coap_numbers::code::INTERNAL_SERVER_ERROR);
-            }
+            use coap_message_utils::ShowMessageExt;
+            defmt::info!("Responding with {}", response.show());
         })
     }
 }

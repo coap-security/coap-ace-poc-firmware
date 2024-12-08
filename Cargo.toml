@@ -56,7 +56,7 @@ nrf52832-hal = "0.15.1"
 
 coap-message = "0.3"
 coap-message-implementations = "0.1.6"
-coap-message-utils = "0.3.7"
+coap-message-utils = "0.3.8"
 coap-gatt-utils = { git = "https://gitlab.com/oscore/coap-gatt-utils/", branch = "v02" }
 coap-handler = "0.2"
 # It'd be nice to use ciborium here, but that's not implemented b/c it's not
@@ -77,12 +77,11 @@ embedded-alloc = "0.6"
 # Needed to introspect ClaimsSet.rest
 ciborium = { version = "0.2", default-features = false }
 
-liboscore = "0.2.0"
-liboscore-msgbackend = { version = "0.2.0", features = [ "alloc" ] }
-# only to enable the feature
-# liboscore-cryptobackend = { version = "0.1.0", features = [ "log_cryptographic_operations_including_secret_keys" ] }
-# just for the above
-log-to-defmt = "0.1.0"
+hex-literal = "0.4.1"
+#coapcore = { git = "https://github.com/ariel-os/ariel-os", features = [ "defmt" ] }
+coapcore = { git = "https://github.com/chrysn-pull-requests/riot-rs", branch = "features-for-coapcore", features = [ "defmt", "acetoken" ] }
+lakers = "0.7.2"
+lakers-crypto-rustcrypto = "0.7.2"
 
 # for rendering the 4.01
 windowed-infinity = { version = "0.1.2", features = [ "with_ciborium" ] }
@@ -107,8 +106,3 @@ nrf-softdevice-s132 = { git = "https://github.com/embassy-rs/nrf-softdevice", re
 
 coset = { git = "https://github.com/chrysn-pull-requests/coset", branch = "oscore" }
 dcaf = { git = "https://github.com/chrysn-pull-requests/dcaf-rs", branch = "oscore" }
-
-# 0.2.1
-liboscore = { git = "https://gitlab.com/oscore/liboscore.git", rev = "29770db9" }
-liboscore-msgbackend = { git = "https://gitlab.com/oscore/liboscore.git", rev = "29770db9" }
-liboscore-cryptobackend = { git = "https://gitlab.com/oscore/liboscore.git", rev = "29770db9" }
