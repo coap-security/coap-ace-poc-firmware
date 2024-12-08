@@ -51,25 +51,14 @@ use coap_message::MinimalWritableMessage;
 /// return None: Requests arriving during that time will just receive a 5.03 Service Unavailable
 /// response, and clients are free to retry immediately.
 pub struct Connection {
-    /// A factory for a CoAP handler
-    chf: &'static crate::CoapHandlerFactory,
     /// An accessor to a ResourceServer
     rs: &'static crate::Rs,
-    coapcore_config: &'static super::AdhocCoapcoreConfig2,
 }
 
 // This will do more once a future version of CoAP-over-GATT is used
 impl Connection {
-    pub fn new(
-        chf: &'static crate::CoapHandlerFactory,
-        rs: &'static crate::Rs,
-        coapcore_config: &'static super::AdhocCoapcoreConfig2,
-    ) -> Self {
-        Self {
-            chf,
-            rs,
-            coapcore_config,
-        }
+    pub fn new(rs: &'static crate::Rs) -> Self {
+        Self { rs }
     }
 
     /// Call this whenever a BLE write arrives. The response value is what any BLE read should
@@ -80,32 +69,12 @@ impl Connection {
     pub fn write(&mut self, written: &mut [u8]) -> heapless::Vec<u8, { crate::MAX_MESSAGE_LEN }> {
         let request = coap_gatt_utils::parse_mut(written).unwrap();
 
-        // FIXME This block is constructing a KCCS out of a raw public key.
-        //
-        // move … somewhere (duplicated w/ webapp)
-        let mut credential = hex_literal::hex!("A1 0E A2 02 60 08 A1 01 A5 01 02 02 41 63 20 01 21 5820 7878787878787878787878787878787878787878787878787878787878787878 22 5820 7979797979797979797979797979797979797979797979797979797979797979");
-        credential[19..19 + 32]
-            .copy_from_slice(self.coapcore_config.core.edhoc_x.unwrap().as_slice());
-        credential[54..54 + 32]
-            .copy_from_slice(self.coapcore_config.core.edhoc_y.unwrap().as_slice());
-        let edhoc_q = self.coapcore_config.core.edhoc_q.unwrap();
-        defmt::info!("Built own credential as {:02x}", credential);
-        let credential = lakers::Credential::parse_ccs(&credential).unwrap();
-
-        let our_as = coapcore::authorization_server::StaticSymmetric31::new(
-            self.coapcore_config
-                .core
-                .as_symmetric
-                .expect("FIXME: Add AS type for maybe-key"),
-        );
-
-        let mut handler = coapcore::seccontext::OscoreEdhocHandler::new(
-            (&credential, &edhoc_q),
-            self.chf.build(None, &mut self.rs),
-            || lakers_crypto_rustcrypto::Crypto::new(self.coapcore_config.rand.clone()),
-            self.coapcore_config.rand.clone(),
-        )
-        .with_authorization_server(our_as);
+        let mut locked = self
+            .rs
+            .try_lock()
+            // FIXME err properly or become more confident that this never happens
+            .expect("Simultaneous access should not happen through single executor");
+        let handler = &mut *locked;
 
         // We have a &mut, but can't tell the handler through the API; maybe an OscoreEdhocHandler
         // should have something extra that takes a &mut parsed message?

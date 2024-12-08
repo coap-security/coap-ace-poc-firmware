@@ -52,7 +52,7 @@ fn main() {
                 as_symmetric: Some(&KEY),
                 edhoc_x: Some({:?}),
                 edhoc_y: Some({:?}),
-                edhoc_q: Some({:?}),
+                edhoc_q: Some(&{:?}),
                 as_pub: None,
             }};
 

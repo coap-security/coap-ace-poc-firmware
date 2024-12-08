@@ -161,14 +161,9 @@ pub(crate) struct AdhocCoapcoreConfig {
 
     pub edhoc_x: Option<[u8; 32]>,
     pub edhoc_y: Option<[u8; 32]>,
-    pub edhoc_q: Option<[u8; 32]>,
+    pub edhoc_q: Option<&'static [u8; 32]>,
 
     pub as_pub: Option<[u8; 32]>,
-}
-
-pub(crate) struct AdhocCoapcoreConfig2 {
-    core: AdhocCoapcoreConfig,
-    rand: SdRandomness,
 }
 
 // None of our current users take these as actual UUIDs...
@@ -190,30 +185,49 @@ struct Server {
     coap: CoAPGattService,
 }
 
-type RsMutex = embassy_sync::mutex::Mutex<
-    embassy_sync::blocking_mutex::raw::NoopRawMutex,
-    ResourceServer<rs_configuration::ApplicationClaims, SdRandomness>,
->;
-type Rs = embassy_sync::mutex::Mutex<
-    embassy_sync::blocking_mutex::raw::NoopRawMutex,
-    ResourceServer<crate::rs_configuration::ApplicationClaims, SdRandomness>,
->;
-// runs into an ICE which I couldn't minify yet
-// type CoapHandlerFactory = impl Fn(Option<crate::rs_configuration::ApplicationClaims>, &'static Rs) -> coap::CoapHandler + 'static;
-pub struct CoapHandlerFactory {
-    leds: &'static blink::Leds,
-    sd: &'static Softdevice,
-}
+mod main_rs_definition {
+    use super::*;
 
-impl CoapHandlerFactory {
-    pub fn build(
-        &self,
-        claims: Option<&crate::rs_configuration::ApplicationClaims>,
-        rs: &'static Rs,
-    ) -> coap::CoapHandler {
-        coap::create_coap_handler(claims, self.sd, self.leds, rs)
+    pub type MainRs = impl coap_handler::Handler;
+
+    pub fn build_main_rs(
+        coapcore_config: AdhocCoapcoreConfig,
+        sd: &'static Softdevice,
+        leds: &'static blink::Leds,
+    ) -> MainRs {
+        // FIXME This block is constructing a KCCS out of a raw public key.
+        //
+        // move … somewhere (duplicated w/ webapp)
+        let mut credential = hex_literal::hex!("A1 0E A2 02 60 08 A1 01 A5 01 02 02 41 63 20 01 21 5820 7878787878787878787878787878787878787878787878787878787878787878 22 5820 7979797979797979797979797979797979797979797979797979797979797979");
+        credential[19..19 + 32].copy_from_slice(coapcore_config.edhoc_x.unwrap().as_slice());
+        credential[54..54 + 32].copy_from_slice(coapcore_config.edhoc_y.unwrap().as_slice());
+        let edhoc_q = coapcore_config.edhoc_q.unwrap();
+        defmt::info!("Built own credential as {:02x}", credential);
+
+        static CREDENTIAL: static_cell::StaticCell<lakers::Credential> =
+            static_cell::StaticCell::new();
+        let credential =
+            CREDENTIAL.init_with(|| lakers::Credential::parse_ccs(&credential).unwrap());
+
+        let our_as = coapcore::authorization_server::StaticSymmetric31::new(
+            coapcore_config
+                .as_symmetric
+                .expect("FIXME: Add AS type for maybe-key"),
+        );
+
+        coapcore::seccontext::OscoreEdhocHandler::new(
+            (credential, &edhoc_q),
+            coap::create_coap_handler(&sd, &leds),
+            move || lakers_crypto_rustcrypto::Crypto::new(SdRandomness(sd)),
+            SdRandomness(sd),
+        )
+        .with_authorization_server(our_as)
     }
 }
+
+use main_rs_definition::{build_main_rs, MainRs};
+
+type Rs = embassy_sync::mutex::Mutex<embassy_sync::blocking_mutex::raw::NoopRawMutex, MainRs>;
 
 /// Single Bluetooth connection handler
 ///
@@ -224,11 +238,9 @@ impl CoapHandlerFactory {
 async fn blueworker(
     server: &'static Server,
     conn: nrf_softdevice::ble::Connection,
-    chf: &'static CoapHandlerFactory,
     rs: &'static Rs,
-    coapcore_config: &'static AdhocCoapcoreConfig2,
 ) {
-    let mut cg = coap_gatt::Connection::new(chf, rs, coapcore_config);
+    let mut cg = coap_gatt::Connection::new(rs);
 
     info!("Running new BLE connection");
     gatt_server::run(&conn, server, |e| match e {
@@ -267,9 +279,7 @@ async fn bluetooth_task(
     server: &'static Server,
     scan_data: &'static [u8],
     spawner: Spawner,
-    chf: &'static CoapHandlerFactory,
     rs: &'static Rs,
-    coapcore_config: &'static AdhocCoapcoreConfig2,
 ) {
     #[rustfmt::skip]
     let adv_data = &[
@@ -325,7 +335,7 @@ async fn bluetooth_task(
             }
         };
 
-        if let Err(_) = spawner.spawn(blueworker(server, conn, chf, rs, coapcore_config)) {
+        if let Err(_) = spawner.spawn(blueworker(server, conn, rs)) {
             // Counting should make sure this never happens, but it's a bit racy.
             warn!("Spawn failure, dropping conn right away");
             USED_CONNECTIONS.fetch_sub(1, core::sync::atomic::Ordering::SeqCst);
@@ -482,38 +492,18 @@ fn main() -> ! {
     let sd: &'static Softdevice = sd;
 
     static LEDS: static_cell::StaticCell<blink::Leds> = static_cell::StaticCell::new();
-    static RS: static_cell::StaticCell<RsMutex> = static_cell::StaticCell::new();
-    static COAP_HANDLER_FACTORY: static_cell::StaticCell<CoapHandlerFactory> =
-        static_cell::StaticCell::new();
-
-    let rs = RS.init(embassy_sync::mutex::Mutex::new(
-        ResourceServer::new_with_association_and_randomness(rs_as_association, SdRandomness(sd)),
-    ));
-
-    let coapcore_config = AdhocCoapcoreConfig2 {
-        core: coapcore_config,
-        rand: SdRandomness(sd),
-    };
-    static COAPCORE_CONFIG: static_cell::StaticCell<AdhocCoapcoreConfig2> =
-        static_cell::StaticCell::new();
-    let coapcore_config = COAPCORE_CONFIG.init(coapcore_config);
+    static RS: static_cell::StaticCell<Rs> = static_cell::StaticCell::new();
 
     executor.run(move |spawner| {
         let leds: &'static blink::Leds = LEDS.init(blink::Leds::new(spawner, leds));
         leds.set_idle(2);
 
-        let coap_handler_factory = COAP_HANDLER_FACTORY.init(CoapHandlerFactory { sd, leds });
+        let handler = build_main_rs(coapcore_config, sd, leds);
+
+        let rs = RS.init(embassy_sync::mutex::Mutex::new(handler));
 
         unwrap!(spawner.spawn(softdevice_task(sd)));
-        unwrap!(spawner.spawn(bluetooth_task(
-            sd,
-            server,
-            scan_data,
-            spawner,
-            coap_handler_factory,
-            rs,
-            coapcore_config
-        )));
+        unwrap!(spawner.spawn(bluetooth_task(sd, server, scan_data, spawner, rs,)));
         info!(
             "Device is ready at {}.",
             nrf_softdevice::ble::get_address(sd)

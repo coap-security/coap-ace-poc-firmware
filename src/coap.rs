@@ -152,131 +152,13 @@ impl coap_handler::Handler for Identify {
     }
 }
 
-/// Resource handler that is decided at the time the handler is built
-pub struct WithPermissions<H: coap_handler::Handler> {
-    handler: H,
-    permissions: u8,
-    error_handler: UnauthorizedSeeAS,
-}
-
-impl<H> coap_handler::Handler for WithPermissions<H>
-where
-    H: coap_handler::Handler,
-{
-    // Absence of request data indicates insufficient permissions
-    type RequestData = Option<Result<H::RequestData, H::ExtractRequestError>>;
-    type ExtractRequestError = core::convert::Infallible;
-    type BuildResponseError<M: MinimalWritableMessage> = Result<
-        Result<
-            H::BuildResponseError<M>,
-            <H::ExtractRequestError as RenderableOnMinimal>::Error<M::UnionError>,
-        >,
-        <UnauthorizedSeeAS as coap_handler::Handler>::BuildResponseError<M>,
-    >;
-
-    fn extract_request_data<M: ReadableMessage>(
-        &mut self,
-        request: &M,
-    ) -> Result<Self::RequestData, core::convert::Infallible> {
-        let codenumber: u8 = request.code().into();
-        let codebit = 1u8.checked_shl((codenumber - 1u8).into());
-        if codebit.map(|bit| bit & self.permissions != 0) == Some(true) {
-            Ok(Some(self.handler.extract_request_data(request)))
-        } else {
-            Ok(None)
-        }
-    }
-    fn estimate_length(&mut self, data: &Self::RequestData) -> usize {
-        data.as_ref()
-            .map(|d| match d {
-                Ok(d) => self.handler.estimate_length(d),
-                // FIXME how do we get an estimate here?
-                Err(_) => 1024,
-            })
-            .unwrap_or(self.error_handler.estimate_length(&()))
-    }
-    fn build_response<M: MutableWritableMessage>(
-        &mut self,
-        response: &mut M,
-        data: Self::RequestData,
-    ) -> Result<(), Self::BuildResponseError<M>> {
-        match data {
-            Some(Ok(data)) => self
-                .handler
-                .build_response(response, data)
-                .map_err(|e| Ok(Ok(e)))?,
-            Some(Err(e)) => e.render(response).map_err(|e| Ok(Err(e)))?,
-            None => self
-                .error_handler
-                .build_response(response, ())
-                .map_err(Err)?,
-        }
-        Ok(())
-    }
-}
-
-/// A handler that sends 4.01 (Unauthorized) and AS Request Creation Hints unconditionally. It only
-/// encodes the audience and AS, no scope or other hints.
-// FIXME: This could become RenderableOnMinimal instead
-// FIXME: This is only pub because it shows up in CoAP signatures
-pub struct UnauthorizedSeeAS(&'static crate::Rs);
-
-impl coap_handler::Handler for UnauthorizedSeeAS {
-    type RequestData = ();
-    type ExtractRequestError = core::convert::Infallible;
-    type BuildResponseError<M: MinimalWritableMessage> = Result<Error, M::UnionError>;
-
-    fn extract_request_data<M: ReadableMessage>(
-        &mut self,
-        _: &M,
-    ) -> Result<Self::RequestData, Self::ExtractRequestError> {
-        Ok(())
-        // We already know all we need
-    }
-    fn estimate_length(&mut self, _data: &Self::RequestData) -> usize {
-        150
-    }
-    fn build_response<M: MutableWritableMessage>(
-        &mut self,
-        response: &mut M,
-        _data: Self::RequestData,
-    ) -> Result<(), Self::BuildResponseError<M>> {
-        if let Ok(rs) = self.0.try_lock() {
-            response.set_code(M::Code::new(UNAUTHORIZED).map_err(|e| Err(e.into()))?);
-            response
-                .add_option_uint(
-                    M::OptionNumber::new(CONTENT_FORMAT).map_err(|e| Err(e.into()))?,
-                    19u8, /* application/ace+cbor */
-                )
-                .map_err(|e| Err(e.into()))?;
-            let payload = response
-                .payload_mut_with_len(140)
-                .map_err(|e| Err(e.into()))?;
-            let mut writer = windowed_infinity::WindowedInfinity::new(payload, 0);
-            let mut encoder = ciborium_ll::Encoder::from(&mut writer);
-
-            let rqh = rs.request_creation_hints();
-            rqh.push_to_encoder(&mut encoder)
-                .expect("Writing to a WindowedInfinity can not fail");
-
-            let written = writer.cursor() as _;
-            response.truncate(written).map_err(|e| Err(e.into()))?;
-            Ok(())
-        } else {
-            Err(Ok(Error::service_unavailable()))
-        }
-    }
-}
-
 /// Create a tree of CoAP resource as described in this module's documentation out of the
 /// individual handler implementations in this module.
 ///
 /// The tree also features a `/.well-known/core` resource listing the other resources.
 pub fn create_coap_handler(
-    claims: Option<&crate::rs_configuration::ApplicationClaims>,
     softdevice: &'static nrf_softdevice::Softdevice,
     leds: &'static crate::blink::Leds,
-    rs: &'static crate::Rs,
 ) -> CoapHandler {
     use coap_handler_implementations::HandlerBuilder;
     use coap_handler_implementations::ReportingHandlerBuilder;
@@ -286,25 +168,12 @@ pub fn create_coap_handler(
     // improved MutableWritableMessage, or better bounds on CBOR serialization size)
     let time_handler = coap_handler_implementations::TypeHandler::new_minicbor(Time);
 
-    let identify_handler = WithPermissions {
-        handler: Identify(leds),
-        permissions: claims.map(|c| c.scope.identify).unwrap_or(0),
-        error_handler: UnauthorizedSeeAS(&rs),
-    };
+    let identify_handler = Identify(leds);
 
-    let temperature_handler = WithPermissions {
-        handler: coap_handler_implementations::TypeHandler::new_minicbor_0_24(Temperature {
-            softdevice,
-        }),
-        permissions: claims.map(|c| c.scope.temp).unwrap_or(0),
-        error_handler: UnauthorizedSeeAS(&rs),
-    };
+    let temperature_handler =
+        coap_handler_implementations::TypeHandler::new_minicbor_0_24(Temperature { softdevice });
 
-    let leds_handler = WithPermissions {
-        handler: coap_handler_implementations::TypeHandler::new_minicbor_0_24(Leds(leds)),
-        permissions: claims.map(|c| c.scope.leds).unwrap_or(0),
-        error_handler: UnauthorizedSeeAS(&rs),
-    };
+    let leds_handler = coap_handler_implementations::TypeHandler::new_minicbor_0_24(Leds(leds));
 
     // Why isn't TypeHandler Reporting?
     let time_handler = coap_handler_implementations::wkc::ConstantSingleRecordReport::new(
@@ -325,7 +194,6 @@ pub fn create_coap_handler(
     coap_handler_implementations::new_dispatcher()
         // Fully unprotected in the demo only
         .at(&["time"], time_handler)
-        // FIXME: Go through OSCORE
         .at(&["leds"], leds_handler)
         .at(&["temp"], temperature_handler)
         .at(&["identify"], identify_handler)
