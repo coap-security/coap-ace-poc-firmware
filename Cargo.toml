@@ -79,13 +79,16 @@ ciborium = { version = "0.2", default-features = false }
 
 hex-literal = "0.4.1"
 #coapcore = { git = "https://github.com/ariel-os/ariel-os", features = [ "defmt" ] }
-coapcore = { git = "https://github.com/chrysn-pull-requests/riot-rs", branch = "features-for-coapcore", features = [ "defmt", "acetoken" ] }
+coapcore = { git = "https://github.com/chrysn-pull-requests/riot-rs", features = [ "defmt" ], rev = "52eb45392d094b87f2bd6a13223216bad63dc51c" } # in branch "features-for-coapcore"
 lakers = "0.7.2"
 lakers-crypto-rustcrypto = "0.7.2"
 
 # for rendering the 4.01
 windowed-infinity = { version = "0.1.2", features = [ "with_ciborium" ] }
 ciborium-ll = { version = "0.2", default-features = false }
+# or recently
+cbor-macro = "0.1.0"
+cboritem = "0.1.2"
 
 [build-dependencies]
 serde = "1"

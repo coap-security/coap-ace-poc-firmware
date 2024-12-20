@@ -209,19 +209,21 @@ mod main_rs_definition {
         let credential =
             CREDENTIAL.init_with(|| lakers::Credential::parse_ccs(&credential).unwrap());
 
-        let our_as = coapcore::authorization_server::StaticSymmetric31::new(
+        use cbor_macro::cbor;
+        let our_seccfg = coapcore::seccfg::StaticSymmetric31::new(
             coapcore_config
                 .as_symmetric
                 .expect("FIXME: Add AS type for maybe-key"),
+            &cbor!({1 /as/:"http://localhost:1103/realms/edf/ace-oauth/token", 5 /aud/: "d00"}),
         );
 
-        coapcore::seccontext::OscoreEdhocHandler::new(
-            (credential, &edhoc_q),
+        coapcore::OscoreEdhocHandler::new(
             coap::create_coap_handler(&sd, &leds),
             move || lakers_crypto_rustcrypto::Crypto::new(SdRandomness(sd)),
             SdRandomness(sd),
         )
-        .with_authorization_server(our_as)
+        // FIXME: Move (credential, &edhoc_q) in there
+        .with_seccfg(our_seccfg)
     }
 }
 
