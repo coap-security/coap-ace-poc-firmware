@@ -453,7 +453,7 @@ fn main() -> ! {
         conn_gatt: Some(raw::ble_gatt_conn_cfg_t {
             // The minimum is not acceptable in amsuess-core-coap-over-gatt-02
             // (and the tokens we post are already in the order of 100 bytes long).
-            att_mtu: 256,
+            att_mtu: 420,
         }),
         gap_device_name: Some(raw::ble_gap_cfg_device_name_t {
             // It needs a mut ptr, but we don't allow writing in the permissions
