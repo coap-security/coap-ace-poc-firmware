@@ -34,11 +34,11 @@ panic-probe = { version = "0.3", features= ["print-defmt"] }
 # Providing an asynchronous runtime needed for the softdevice
 # For integrated-timers see https://github.com/embassy-rs/embassy/issues/1109
 # (the alternative is generic-queue on embassy-time)
-embassy-executor = { version = "0.4.0", features = [ "defmt", "integrated-timers", "executor-thread", "arch-cortex-m" ]}
+embassy-executor = { version = "0.6.0", features = [ "defmt", "integrated-timers", "executor-thread", "arch-cortex-m" ]}
 # ... and helpers to get the 'static Server we need in the runners
 static_cell = "1"
 
-embassy-time = { version = "0.2.0", features = [ "defmt" ] }
+embassy-time = { version = "0.3.0", features = [ "defmt" ] }
 embassy-sync = "0.5.0"
 
 fixed = "1"
@@ -50,7 +50,7 @@ nrf-softdevice = { version = "0.1.0", features = ["defmt", "nrf52832", "s132", "
 # We could pick 112, that would suffice from the required features, but
 # building on 132 to ensure we can migrate over.
 nrf-softdevice-s132 = "0.1.1"
-embassy-nrf = { version = "0.1.0", features = [ "defmt", "nrf52832", "gpiote", "time-driver-rtc1" ]}
+embassy-nrf = { version = "0.2.0", features = [ "defmt", "nrf52832", "gpiote", "time-driver-rtc1" ]}
 # LEDs and buttons, really
 nrf52832-hal = "0.15.1"
 
@@ -97,15 +97,15 @@ hex = "0.4"
 
 [patch.crates-io]
 # These are published, but wisdom on matrix is to not mix them
-embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "3b6eaf414a92114037a40dcb3ce37a4191c57a2b" }
-embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "3b6eaf414a92114037a40dcb3ce37a4191c57a2b" }
-embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "3b6eaf414a92114037a40dcb3ce37a4191c57a2b" }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "6d9ed4c0807c977aa6d3c852360d52128f8c459a" }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "6d9ed4c0807c977aa6d3c852360d52128f8c459a" }
+embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "6d9ed4c0807c977aa6d3c852360d52128f8c459a" }
 
 # None of these are available on crates.io yet
-embassy-nrf = { git = "https://github.com/embassy-rs/embassy", rev = "3b6eaf414a92114037a40dcb3ce37a4191c57a2b" }
+embassy-nrf = { git = "https://github.com/embassy-rs/embassy", rev = "6d9ed4c0807c977aa6d3c852360d52128f8c459a" }
 
-nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "fa1d5915be4de37b97b4771ddd22bce07d69be54" }
-nrf-softdevice-s132 = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "fa1d5915be4de37b97b4771ddd22bce07d69be54" }
+nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "bb1600b728c8acbaecf974741ee5867b472289f3" }
+nrf-softdevice-s132 = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "bb1600b728c8acbaecf974741ee5867b472289f3" }
 
 coset = { git = "https://github.com/chrysn-pull-requests/coset", branch = "oscore" }
 dcaf = { git = "https://github.com/chrysn-pull-requests/dcaf-rs", branch = "oscore" }

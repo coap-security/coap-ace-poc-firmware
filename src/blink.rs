@@ -24,15 +24,11 @@ pub struct Leds {
     spawner: embassy_executor::Spawner,
 }
 
-// Embassy tasks don't take too kindly to being generic, so we're using concrete types here.
-//
-// Repeating the pinout could be avoided by using &mut dyn OutputPin, clever TAIT, or just
-// degrading the pins.
 pub struct LedPins {
-    pub l1: embassy_nrf::gpio::Output<'static, embassy_nrf::peripherals::P0_17>,
-    pub l2: embassy_nrf::gpio::Output<'static, embassy_nrf::peripherals::P0_18>,
-    pub l3: embassy_nrf::gpio::Output<'static, embassy_nrf::peripherals::P0_19>,
-    pub l4: embassy_nrf::gpio::Output<'static, embassy_nrf::peripherals::P0_20>,
+    pub l1: embassy_nrf::gpio::Output<'static>,
+    pub l2: embassy_nrf::gpio::Output<'static>,
+    pub l3: embassy_nrf::gpio::Output<'static>,
+    pub l4: embassy_nrf::gpio::Output<'static>,
 }
 
 impl Leds {
