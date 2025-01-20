@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # See README for all details on copyright, authorship and license.
 
-# Setup as recommended by probe-run. This needs to be adjusted for when running on different hardware.
+# This needs to be adjusted for when running on different hardware.
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
-runner = "probe-rs run --chip nRF52832_xxAA"
+runner = "probe-rs run --chip nRF52832_xxAA --preverify"
 
 [build]
 target = "thumbv7em-none-eabihf"
