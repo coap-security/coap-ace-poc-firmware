@@ -79,9 +79,13 @@ ciborium = { version = "0.2", default-features = false }
 
 hex-literal = "0.4.1"
 #coapcore = { git = "https://github.com/ariel-os/ariel-os", features = [ "defmt" ] }
-coapcore = { git = "https://github.com/chrysn-pull-requests/riot-rs", features = [ "defmt" ], rev = "52eb45392d094b87f2bd6a13223216bad63dc51c" } # in branch "features-for-coapcore"
-lakers = "0.7.2"
+coapcore = { git = "https://github.com/chrysn-pull-requests/riot-rs", features = [ "defmt" ], rev = "c57b4a12a8ac2c4d3bf262eee144713541d2b540" } # in branch "coapcore-signed"
+lakers = { version = "0.7.2", features = [ "defmt" ] }
 lakers-crypto-rustcrypto = "0.7.2"
+# Just to enable the features. The unmodified sizes are just a tad too small
+# for signed tokens (at least with full X and Y coorinates in them), but the
+# full quadrupled sizes lead to crashes in the Softdevcie.
+lakers-shared = { version = "0.7.2", features = [ "max_message_size_len_384", "max_kdf_content_len_384", "max_buffer_len_384" ] }
 
 # for rendering the 4.01
 windowed-infinity = { version = "0.1.2", features = [ "with_ciborium" ] }
@@ -109,3 +113,11 @@ nrf-softdevice-s132 = { git = "https://github.com/embassy-rs/nrf-softdevice", re
 
 coset = { git = "https://github.com/chrysn-pull-requests/coset", branch = "oscore" }
 dcaf = { git = "https://github.com/chrysn-pull-requests/dcaf-rs", branch = "oscore" }
+
+lakers = { git = "https://github.com/chrysn-pull-requests/edhoc-rs", rev = "7f8e8944602aaa90d89eab459f4124a5e1a9fdec" }# from branch "size-granularity"
+lakers-shared = { git = "https://github.com/chrysn-pull-requests/edhoc-rs", rev = "7f8e8944602aaa90d89eab459f4124a5e1a9fdec" }
+lakers-crypto-rustcrypto = { git = "https://github.com/chrysn-pull-requests/edhoc-rs", rev = "7f8e8944602aaa90d89eab459f4124a5e1a9fdec" }
+
+# Apply https://github.com/twittner/minicbor/pull/9 for coapcore
+minicbor-derive = { git = "https://github.com/chrysn-pull-requests/minicbor", branch = "negativ-indices" }
+minicbor = { git = "https://github.com/chrysn-pull-requests/minicbor", branch = "negativ-indices" }

@@ -163,7 +163,7 @@ pub(crate) struct AdhocCoapcoreConfig {
     pub edhoc_y: Option<[u8; 32]>,
     pub edhoc_q: Option<&'static [u8; 32]>,
 
-    pub as_pub: Option<[u8; 32]>,
+    pub as_pub: Option<([u8; 32], [u8; 32])>,
 }
 
 // None of our current users take these as actual UUIDs...
@@ -198,32 +198,34 @@ mod main_rs_definition {
         // FIXME This block is constructing a KCCS out of a raw public key.
         //
         // move … somewhere (duplicated w/ webapp)
-        let mut credential = hex_literal::hex!("A1 0E A2 02 60 08 A1 01 A5 01 02 02 41 63 20 01 21 5820 7878787878787878787878787878787878787878787878787878787878787878 22 5820 7979797979797979797979797979797979797979797979797979797979797979");
-        credential[19..19 + 32].copy_from_slice(coapcore_config.edhoc_x.unwrap().as_slice());
-        credential[54..54 + 32].copy_from_slice(coapcore_config.edhoc_y.unwrap().as_slice());
+        // FIXME: Turned from KCCS to CCS, which is the credential (KCCS is the ID_CRED)
+        let mut credential = hex_literal::hex!("A2 02 60 08 A1 01 A5 01 02 02 41 63 20 01 21 5820 7878787878787878787878787878787878787878787878787878787878787878 22 5820 7979797979797979797979797979797979797979797979797979797979797979");
+        credential[17..17 + 32].copy_from_slice(coapcore_config.edhoc_x.unwrap().as_slice());
+        credential[52..52 + 32].copy_from_slice(coapcore_config.edhoc_y.unwrap().as_slice());
         let edhoc_q = coapcore_config.edhoc_q.unwrap();
         defmt::info!("Built own credential as {:02x}", credential);
 
-        static CREDENTIAL: static_cell::StaticCell<lakers::Credential> =
-            static_cell::StaticCell::new();
-        let credential =
-            CREDENTIAL.init_with(|| lakers::Credential::parse_ccs(&credential).unwrap());
+        let credential = lakers::Credential::parse_ccs(&credential).unwrap();
 
         use cbor_macro::cbor;
-        let our_seccfg = coapcore::seccfg::StaticSymmetric31::new(
-            coapcore_config
-                .as_symmetric
-                .expect("FIXME: Add AS type for maybe-key"),
-            &cbor!({1 /as/:"http://localhost:1103/realms/edf/ace-oauth/token", 5 /aud/: "d00"}),
-        );
+        let mut our_seccfg = coapcore::seccfg::ConfigBuilder::new()
+            .with_request_creation_hints(
+                &cbor!({1 /as/:"http://localhost:1103/realms/edf/ace-oauth/token", 5 /aud/: "d00"}),
+            )
+            .with_own_edhoc_credential(credential, *edhoc_q);
+        if let Some((x, y)) = coapcore_config.as_pub {
+            our_seccfg = our_seccfg.with_aif_asymmetric_es256(x, y, "d00".try_into().unwrap());
+        }
+        if let Some(key) = coapcore_config.as_symmetric {
+            our_seccfg = our_seccfg.with_aif_symmetric_as_aesccm256(*key);
+        }
 
         coapcore::OscoreEdhocHandler::new(
             coap::create_coap_handler(&sd, &leds),
+            our_seccfg,
             move || lakers_crypto_rustcrypto::Crypto::new(SdRandomness(sd)),
             SdRandomness(sd),
         )
-        // FIXME: Move (credential, &edhoc_q) in there
-        .with_seccfg(our_seccfg)
     }
 }
 

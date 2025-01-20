@@ -14,6 +14,9 @@ struct Config<'a> {
     edhoc_x: &'a str,
     edhoc_y: &'a str,
     edhoc_q: &'a str,
+
+    as_pub_x: Option<&'a str>,
+    as_pub_y: Option<&'a str>,
 }
 
 fn main() {
@@ -53,7 +56,7 @@ fn main() {
                 edhoc_x: Some({:?}),
                 edhoc_y: Some({:?}),
                 edhoc_q: Some(&{:?}),
-                as_pub: None,
+                as_pub: {:?},
             }};
 
             (rs_as, coapcore_config)
@@ -62,6 +65,17 @@ fn main() {
         hex::decode(config.edhoc_x).expect("Config edhoc_x should be hex"),
         hex::decode(config.edhoc_y).expect("Config edhoc_y should be hex"),
         hex::decode(config.edhoc_q).expect("Config edhoc_q should be hex"),
+        {
+            let x = config.as_pub_x.map(hex::decode).transpose()
+                .expect("Config as_pub_x should be hex");
+            let y = config.as_pub_y.map(hex::decode).transpose()
+                .expect("Config as_pub_y should be hex");
+            match (x, y) {
+                (Some(x), Some(y)) => Some((x, y)),
+                (None, None) => None,
+                _ => panic!("Configs as_pub_x and as_pub_y have to be given as a pair"),
+            }
+        },
     )
     .unwrap();
 

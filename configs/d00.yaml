@@ -8,3 +8,9 @@ key: a4d14db59e06fe5ee9a069595b0613ba47a9ef7dbee9dbf38bff09c417365cbd
 edhoc_x: e605bbbbfef9afbe0e4d321e7a8c7ba29d8cde24285c39922e6a34a8a15eaddb
 edhoc_y: fce554446a46b2251340b97b0433c3930f58fa8c2e6dc4b5f6d0b2e5bcd13a47
 edhoc_q: d8fc261c26612ca3cf2afe551525a1d8725d08210c501947fc8c21ebf98d253d
+
+# From http://localhost:1103/realms/edf/ace-oauth/server-public-keys (copy any
+# token request from the browser console as cURL, remove the trailing --data
+# and set the path to …/ace-oauth/server-public-keys)
+as_pub_x: "62976ab88add7cd498828581d6af03d11e2bf99d282db43edb5a23fd284f4a9a"
+as_pub_y: "938d4c8bbbd1cbe01caa20b33d8bc14df2ce19f0b3e375b74a59f377282f8bc5"
