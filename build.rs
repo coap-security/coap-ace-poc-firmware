@@ -52,6 +52,8 @@ fn main() {
             }};
 
             let coapcore_config = AdhocCoapcoreConfig {{
+                request_creation_hints: &cbor_macro::cbor!({{1 /as/:{:?}, 5 /aud/: {:?}}}),
+                audience: {:?},
                 as_symmetric: Some(&KEY),
                 edhoc_x: Some({:?}),
                 edhoc_y: Some({:?}),
@@ -62,6 +64,9 @@ fn main() {
             (rs_as, coapcore_config)
         }}",
         config.issuer, config.audience, config.as_uri, key,
+        config.as_uri,
+        config.audience,
+        config.audience,
         hex::decode(config.edhoc_x).expect("Config edhoc_x should be hex"),
         hex::decode(config.edhoc_y).expect("Config edhoc_y should be hex"),
         hex::decode(config.edhoc_q).expect("Config edhoc_q should be hex"),

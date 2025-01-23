@@ -157,6 +157,9 @@ impl rand_core::RngCore for SdRandomness {
 impl rand_core::CryptoRng for SdRandomness {}
 
 pub(crate) struct AdhocCoapcoreConfig {
+    pub audience: &'static str,
+    pub request_creation_hints: &'static [u8],
+
     pub as_symmetric: Option<&'static [u8; 32]>,
 
     pub edhoc_x: Option<[u8; 32]>,
@@ -207,14 +210,15 @@ mod main_rs_definition {
 
         let credential = lakers::Credential::parse_ccs(&credential).unwrap();
 
-        use cbor_macro::cbor;
         let mut our_seccfg = coapcore::seccfg::ConfigBuilder::new()
-            .with_request_creation_hints(
-                &cbor!({1 /as/:"http://localhost:1103/realms/edf/ace-oauth/token", 5 /aud/: "d00"}),
-            )
+            .with_request_creation_hints(coapcore_config.request_creation_hints)
             .with_own_edhoc_credential(credential, *edhoc_q);
         if let Some((x, y)) = coapcore_config.as_pub {
-            our_seccfg = our_seccfg.with_aif_asymmetric_es256(x, y, "d00".try_into().unwrap());
+            our_seccfg = our_seccfg.with_aif_asymmetric_es256(
+                x,
+                y,
+                coapcore_config.audience.try_into().unwrap(),
+            );
         }
         if let Some(key) = coapcore_config.as_symmetric {
             our_seccfg = our_seccfg.with_aif_symmetric_as_aesccm256(*key);
