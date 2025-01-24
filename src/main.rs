@@ -418,12 +418,11 @@ fn main() -> ! {
     info!("Device is starting up...");
 
     use ace_oscore_helpers::aead;
-    let (rs_as_association, coapcore_config) =
-        include!(concat!(env!("OUT_DIR"), "/rs_as_association.rs"));
+    let coapcore_config = include!(concat!(env!("OUT_DIR"), "/rs_as_association.rs"));
 
     let mut full_name = heapless::String::<20>::new();
     full_name.push_str("CoAP-ACE demo #").unwrap();
-    full_name.push_str(&rs_as_association.audience).unwrap();
+    full_name.push_str(coapcore_config.audience).unwrap();
     let full_name = full_name.into_bytes();
     let full_name_len: u16 = full_name.len().try_into().unwrap();
 
@@ -432,16 +431,12 @@ fn main() -> ! {
     let scan_data = SCAN_DATA.init({
         let mut scan_data = heapless::Vec::<u8, 28>::new();
         scan_data
-            .push(
-                (1 + 5 + rs_as_association.audience.len())
-                    .try_into()
-                    .unwrap(),
-            )
+            .push((1 + 5 + coapcore_config.audience.len()).try_into().unwrap())
             .unwrap();
         scan_data.push(0x08).unwrap();
         scan_data.extend_from_slice(b"CoAP ").unwrap();
         scan_data
-            .extend_from_slice(rs_as_association.audience.as_bytes())
+            .extend_from_slice(coapcore_config.audience.as_bytes())
             .unwrap();
         scan_data
             .extend_from_slice(&[

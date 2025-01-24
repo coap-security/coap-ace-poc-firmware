@@ -36,44 +36,35 @@ fn main() {
     write!(
         config_outfile,
         "{{
-            #[no_mangle]
-            static ISSUER: &str = &{:?};
-            #[no_mangle]
-            static AUDIENCE: &str = &{:?};
-            #[no_mangle]
-            static AS_URI: &str = &{:?};
-            #[no_mangle]
-            static KEY: [u8; 32] = {:?};
-            let rs_as = ace_oscore_helpers::resourceserver::RsAsSharedData {{
-                issuer: Some(*core::hint::black_box(&ISSUER)),
-                audience: *core::hint::black_box(&AUDIENCE),
-                as_uri: *core::hint::black_box(&AS_URI),
-                key: aead::generic_array::GenericArray::clone_from_slice(core::hint::black_box(&KEY)),
-            }};
-
             let coapcore_config = AdhocCoapcoreConfig {{
                 request_creation_hints: &cbor_macro::cbor!({{1 /as/:{:?}, 5 /aud/: {:?}}}),
                 audience: {:?},
-                as_symmetric: Some(&KEY),
+                as_symmetric: Some(&{:?}),
                 edhoc_x: Some({:?}),
                 edhoc_y: Some({:?}),
                 edhoc_q: Some(&{:?}),
                 as_pub: {:?},
             }};
 
-            (rs_as, coapcore_config)
+            coapcore_config
         }}",
-        config.issuer, config.audience, config.as_uri, key,
         config.as_uri,
         config.audience,
         config.audience,
+        key,
         hex::decode(config.edhoc_x).expect("Config edhoc_x should be hex"),
         hex::decode(config.edhoc_y).expect("Config edhoc_y should be hex"),
         hex::decode(config.edhoc_q).expect("Config edhoc_q should be hex"),
         {
-            let x = config.as_pub_x.map(hex::decode).transpose()
+            let x = config
+                .as_pub_x
+                .map(hex::decode)
+                .transpose()
                 .expect("Config as_pub_x should be hex");
-            let y = config.as_pub_y.map(hex::decode).transpose()
+            let y = config
+                .as_pub_y
+                .map(hex::decode)
+                .transpose()
                 .expect("Config as_pub_y should be hex");
             match (x, y) {
                 (Some(x), Some(y)) => Some((x, y)),
