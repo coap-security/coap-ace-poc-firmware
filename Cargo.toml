@@ -79,7 +79,7 @@ ciborium = { version = "0.2", default-features = false }
 
 hex-literal = "0.4.1"
 #coapcore = { git = "https://github.com/ariel-os/ariel-os", features = [ "defmt" ] }
-coapcore = { git = "https://github.com/chrysn-pull-requests/riot-rs", features = [ "defmt" ], rev = "dd6af4deb86b9537024c58bdc06f14e0fe561eba" } # in branch "coapcore-signed"
+coapcore = { git = "https://github.com/chrysn-pull-requests/riot-rs", features = [ "defmt" ], rev = "869da50922816377d4ff7fdc2a07c63b47a8e65f" } # in branch "coapcore-time"
 lakers = { version = "0.7.2", features = [ "defmt" ] }
 lakers-crypto-rustcrypto = "0.7.2"
 # Just to enable the features. The unmodified sizes are just a tad too small

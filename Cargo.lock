@@ -517,7 +517,7 @@ checksum = "e766be4563107bc11c281c017ab922c3f3079345c9aa0fe747b4f9abc13411ac"
 [[package]]
 name = "coapcore"
 version = "0.0.1"
-source = "git+https://github.com/chrysn-pull-requests/riot-rs?rev=c57b4a12a8ac2c4d3bf262eee144713541d2b540#c57b4a12a8ac2c4d3bf262eee144713541d2b540"
+source = "git+https://github.com/chrysn-pull-requests/riot-rs?rev=869da50922816377d4ff7fdc2a07c63b47a8e65f#869da50922816377d4ff7fdc2a07c63b47a8e65f"
 dependencies = [
  "aes",
  "arrayvec",

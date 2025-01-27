@@ -198,6 +198,7 @@ mod main_rs_definition {
         sd: &'static Softdevice,
         leds: &'static blink::Leds,
     ) -> MainRs {
+        use cbor_macro::cbor;
         // FIXME This block is constructing a KCCS out of a raw public key.
         //
         // move … somewhere (duplicated w/ webapp)
@@ -211,6 +212,11 @@ mod main_rs_definition {
         let credential = lakers::Credential::parse_ccs(&credential).unwrap();
 
         let mut our_seccfg = coapcore::seccfg::ConfigBuilder::new()
+            .allow_unauthenticated(
+                coapcore::scope::AifValue::parse(&cbor!([["/time", 7/GET+POST+PUT/]]))
+                    .unwrap()
+                    .into(),
+            )
             .with_request_creation_hints(coapcore_config.request_creation_hints)
             .with_own_edhoc_credential(credential, *edhoc_q);
         if let Some((x, y)) = coapcore_config.as_pub {
@@ -229,6 +235,7 @@ mod main_rs_definition {
             our_seccfg,
             move || lakers_crypto_rustcrypto::Crypto::new(SdRandomness(sd)),
             SdRandomness(sd),
+            devicetime::Time,
         )
     }
 }
