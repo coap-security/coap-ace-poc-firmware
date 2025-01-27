@@ -1,7 +1,12 @@
 # SPDX-FileCopyrightText: Copyright 2022 EDF (Électricité de France S.A.)
 # SPDX-License-Identifier: BSD-3-Clause
 # See README for all details on copyright, authorship and license.
-as_uri: https://as.coap.amsuess.com/token
+as_pub_x: b4108ad8f21d08a877627aaf3787a91afe75a9886e3bffeb152f9fa42c1dfb50
+as_pub_y: 6765776379ee0a507e173841669c33fc587bbeac4609b86dfb12af28118baf8a
+as_uri: https://keycloak.coap.amsuess.com/realms/edf/ace-oauth/token
 audience: d06
+edhoc_q: b52d7d70474287fc219fa2f4377dd0c5ce595d46cb078fadaa3df5ed2225a372
+edhoc_x: f6f2054cbab4ebbcd6680cdc010491b3405d0f360888a1aad9931cd1bd65a12e
+edhoc_y: fe7aa6e4096f9ff3c2484c2ae72f8166099c2410c18137cb5fa01a4d6b9cc70d
 issuer: AS
 key: a56ebd03463de6d3f80060a32e079d9cd3553633c77f24941f82d6a6a42a1175
