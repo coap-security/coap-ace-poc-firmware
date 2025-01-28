@@ -9,7 +9,7 @@ struct Config<'a> {
     issuer: &'a str,
     audience: &'a str,
     as_uri: &'a str,
-    key: &'a str,
+    key: Option<&'a str>,
 
     edhoc_x: &'a str,
     edhoc_y: &'a str,
@@ -27,7 +27,9 @@ fn main() {
     let yaml = String::from_utf8(yaml).expect("Config file is not UTF-8");
     let config: Config =
         serde_yaml::from_str(&yaml).expect("Config file needs to match config structure");
-    let key = hex::decode(config.key).expect("Config key should be hex");
+    let key = config
+        .key
+        .map(|k| hex::decode(k).expect("Config key should be hex"));
     let config_outfile = Path::new(&std::env::var("OUT_DIR").unwrap()).join("rs_as_association.rs");
     let mut config_outfile =
         std::fs::File::create(config_outfile).expect("Config outfile needs to be writable");
@@ -39,7 +41,7 @@ fn main() {
             let coapcore_config = AdhocCoapcoreConfig {{
                 request_creation_hints: &cbor_macro::cbor!({{1 /as/:{:?}, 5 /aud/: {:?}}}),
                 audience: {:?},
-                as_symmetric: Some(&{:?}),
+                as_symmetric: {:?},
                 edhoc_x: Some({:?}),
                 edhoc_y: Some({:?}),
                 edhoc_q: Some(&{:?}),

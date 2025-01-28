@@ -160,7 +160,7 @@ pub(crate) struct AdhocCoapcoreConfig {
     pub audience: &'static str,
     pub request_creation_hints: &'static [u8],
 
-    pub as_symmetric: Option<&'static [u8; 32]>,
+    pub as_symmetric: Option<[u8; 32]>,
 
     pub edhoc_x: Option<[u8; 32]>,
     pub edhoc_y: Option<[u8; 32]>,
@@ -227,7 +227,7 @@ mod main_rs_definition {
             );
         }
         if let Some(key) = coapcore_config.as_symmetric {
-            our_seccfg = our_seccfg.with_aif_symmetric_as_aesccm256(*key);
+            our_seccfg = our_seccfg.with_aif_symmetric_as_aesccm256(key);
         }
 
         coapcore::OscoreEdhocHandler::new(
