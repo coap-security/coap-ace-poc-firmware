@@ -15,13 +15,17 @@ keys that the AS is using.
 import secrets
 import yaml
 
-for i in range(10):
+DEVICES = 20
+DEVICES_WITH_STATIC_KEYS = 10
+
+for i in range(20):
     d = {
         'issuer': "AS",
         'as_uri': "https://keycloak.coap.amsuess.com/realms/edf/ace-oauth/token",
         }
     d['audience'] = "d%02d" % i
-    d['key'] = secrets.token_bytes(32).hex()
+    if i < DEVICES_WITH_STATIC_KEYS:
+        d['key'] = secrets.token_bytes(32).hex()
 
     from cryptography.hazmat.primitives.asymmetric import ec
 
