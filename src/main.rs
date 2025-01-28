@@ -21,13 +21,10 @@
 //!   Note that that software is limited in how it can be distributed; you will find the precise
 //!   license terms along with the file.
 //!
-//! * `probe-run`, `probe-rs` and `nrf-recover` installed: `$ cargo install probe-run probe-rs-cli
-//!   nrf-recover`
+//! * `probe-rs` and `nrf-recover` installed: `$ cargo install probe-rs-cli nrf-recover`
 //!
 //!   Other debuggers will do as well, but to display debug output, some tool that supports `defmt`
-//!   is needed; `probe-run` does that.
-//!
-//!   <!-- TBD: probably one of the two probe- might do -->
+//!   is needed; `probe-rs` does that.
 //!
 //! To build and install the firmware:
 //!
@@ -57,7 +54,7 @@
 //!   $ cargo +nightly run --release
 //!   ```
 //!
-//!   which downloads all relevant crates, builds them and flashes them, all using `probe-run`.
+//!   which downloads all relevant crates, builds them and flashes them, all using `probe-rs`.
 //!
 //!   After a long horizontal line, the program will print any debug output the firmware produces.
 //!   To increase verbosity, prefix the command with `DEFMT_LOG=info`.
