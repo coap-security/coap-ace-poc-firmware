@@ -99,8 +99,6 @@ use embassy_executor::{Executor, Spawner};
 use nrf_softdevice::ble::{gatt_server, peripheral};
 use nrf_softdevice::{raw, Softdevice};
 
-use ace_oscore_helpers::resourceserver::ResourceServer;
-
 static EXECUTOR: static_cell::StaticCell<Executor> = static_cell::StaticCell::new();
 
 /// Maximum number of concurrent BLE connections to manage
@@ -424,7 +422,6 @@ fn outer_main() -> ! {
 fn main() -> ! {
     info!("Device is starting up...");
 
-    use ace_oscore_helpers::aead;
     let coapcore_config = include!(concat!(env!("OUT_DIR"), "/rs_as_association.rs"));
 
     let mut full_name = heapless::String::<20>::new();

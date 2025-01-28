@@ -7,13 +7,9 @@
 //! the resources `/time`, `/leds`, `/temp` and `/identify`, all backed by structs of this module,
 //! and `/authz-info`, backed by a resource server.
 
-use coap_message::{
-    error::RenderableOnMinimal, Code as _, MinimalWritableMessage, MutableWritableMessage,
-    OptionNumber as _, ReadableMessage,
-};
+use coap_message::{Code as _, MinimalWritableMessage, MutableWritableMessage, ReadableMessage};
 use coap_message_utils::Error;
-use coap_numbers::code::{CHANGED, UNAUTHORIZED};
-use coap_numbers::option::CONTENT_FORMAT;
+use coap_numbers::code::CHANGED;
 
 pub type CoapHandler = impl coap_handler::Handler;
 
