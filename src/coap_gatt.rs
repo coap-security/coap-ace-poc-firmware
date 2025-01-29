@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: Copyright 2022 EDF (Électricité de France S.A.)
+// SPDX-FileCopyrightText: Copyright 2022-2024 EDF (Électricité de France S.A.)
 // SPDX-License-Identifier: BSD-3-Clause
 // See README for all details on copyright, authorship and license.
 //! Implementation of the CoAP-over-GATT protocol
@@ -16,6 +16,7 @@
 //! [coap_gatt_utils] module. In fact, this module might move in there over time.
 
 use coap_handler::Handler;
+use coap_message::error::RenderableOnMinimal;
 use coap_message::MinimalWritableMessage;
 
 /// State held inside a single connection
@@ -50,16 +51,14 @@ use coap_message::MinimalWritableMessage;
 /// return None: Requests arriving during that time will just receive a 5.03 Service Unavailable
 /// response, and clients are free to retry immediately.
 pub struct Connection {
-    /// A factory for a CoAP handler
-    chf: &'static crate::CoapHandlerFactory,
     /// An accessor to a ResourceServer
     rs: &'static crate::Rs,
 }
 
 // This will do more once a future version of CoAP-over-GATT is used
 impl Connection {
-    pub fn new(chf: &'static crate::CoapHandlerFactory, rs: &'static crate::Rs) -> Self {
-        Self { chf, rs }
+    pub fn new(rs: &'static crate::Rs) -> Self {
+        Self { rs }
     }
 
     /// Call this whenever a BLE write arrives. The response value is what any BLE read should
@@ -68,120 +67,57 @@ impl Connection {
     /// Note that this passes in data that is primarily supposed to be read as `&mut`. This is to
     /// later allow OSCORE decryption in-place.
     pub fn write(&mut self, written: &mut [u8]) -> heapless::Vec<u8, { crate::MAX_MESSAGE_LEN }> {
-        let mut request = coap_gatt_utils::parse_mut(written).unwrap();
+        let request = coap_gatt_utils::parse_mut(written).unwrap();
 
-        use coap_message::{MessageOption, ReadableMessage};
-        // FIXME: We need to copy things out because ReadableMessage by design only hands out
-        // short-lived values (so they can be built in the iterator if need be)
-        let mut oscore_option: Option<heapless::Vec<u8, 16>> = None;
-        for o in request.options() {
-            if o.number() == coap_numbers::option::OSCORE {
-                oscore_option = o
-                    .value()
-                    .try_into()
-                    .map_err(|e| {
-                        defmt::error!("OSCORE option is too long");
-                        e
-                    })
-                    .ok();
-                break;
-            }
-        }
-        let oscore_option = match &oscore_option {
-            Some(o) => liboscore::OscoreOption::parse(&o)
-                .map_err(|e| {
-                    defmt::error!("OSCORE option found but parsing failed");
-                    e
-                })
-                .ok(),
-            None => None,
-        };
+        let mut locked = self
+            .rs
+            .try_lock()
+            // FIXME err properly or become more confident that this never happens
+            .expect("Simultaneous access should not happen through single executor");
+        let handler = &mut *locked;
 
-        let vec07: heapless07::Vec<u8, 400> = if let Some(oscore_option) = oscore_option {
-            // Look it up, lock RS, or 5.03
-            if let Some(mut rs) = self.rs.try_lock().ok() {
-                let mut context_app_claims = rs.look_up_context(&oscore_option);
+        // We have a &mut, but can't tell the handler through the API; maybe an OscoreEdhocHandler
+        // should have something extra that takes a &mut parsed message?
+        let extracted = handler.extract_request_data(&request);
 
-                if context_app_claims.as_ref().map(|(_, ac)| ac.valid()) == Some(false) {
-                    // Not removing them from the RS: they'll age out anyway
-                    context_app_claims = None;
-                }
+        coap_gatt_utils::write(|response| {
+            // Error handling here is a tad odd: our response has a `.reset()`, but libOSCORE
+            // doesn't have the API (in particular it can't rely on its backend to have a
+            // reset/rewind), so we have to do separate protect steps.
+            //
+            // At the same time, we have to do everything in a single .reset()able
+            // coap_gatt_utils::write, because the lifetimes of the errors unfortunately may be
+            // bound to its buffer.
+            //
+            // This makes this whole mess even more arcane and verbose than is already generally
+            // the trouble with writing servers for coap-handler 0.2.
 
-                if let Some((context, app_claims)) = context_app_claims {
-                    defmt::info!(
-                        "OSCORE option indicated KID {:?}, found key with claims {:?}",
-                        oscore_option.kid(),
-                        &app_claims
-                    );
+            match extracted {
+                Ok(extracted) => {
+                    let rendered = handler.build_response(response, extracted);
 
-                    // The self.rs will actually be locked, because we hold it through `rs` which
-                    // goes into the &mut OSCORE context. An advanced version that supports token
-                    // upgrades might, rather than passing in a runtime-optional RS, an Either that
-                    // can bea &mut to a slot inside the RS that can be upgraded, or an RS through
-                    // which something new can be added.
-                    let mut handler = self.chf.build(Some(app_claims), &mut self.rs);
+                    if let Err(e) = rendered {
+                        response.reset();
+                        let rendered = e.render(response);
 
-                    let Ok((mut correlation, extracted)) = liboscore::unprotect_request(
-                        &mut request,
-                        oscore_option,
-                        context,
-                        |request| handler.extract_request_data(request),
-                    ) else {
-                        defmt::error!("OSCORE request could not be unprotected");
-
-                        return heapless::Vec::from_slice(&coap_gatt_utils::write::<400>(
-                            |response| {
-                                response.set_code(coap_numbers::code::BAD_REQUEST);
-                                // Could also set "Decryption failed"
-                                response.set_payload(b"");
-                            },
-                        ))
-                        .expect("Conversion between heapless versions should not fail");
-                    };
-
-                    defmt::info!("OSCORE request processed, building response...");
-
-                    coap_gatt_utils::write(|response| {
-                        if liboscore::protect_response(
-                            response,
-                            context,
-                            &mut correlation,
-                            |response| handler.build_response(response, extracted),
-                        )
-                        .is_err()
-                        {
-                            // Practically, this means we're either out of sequence numbers (which
-                            // was caught in the preparatory phase, and we can err out), or
-                            // something in the crypto step went wrong (the only thing that comes
-                            // to mind is too long AAD, which can't practically happen), and then
-                            // we're producing an erroneous message at best (at worst the backend
-                            // panics) because we already wrote options and payload.
+                        if let Err(_) = rendered {
+                            response.reset();
                             response.set_code(coap_numbers::code::INTERNAL_SERVER_ERROR);
-                            response.set_payload(b"");
                         }
-                    })
-                } else {
-                    coap_gatt_utils::write(|response| {
-                        response.set_code(coap_numbers::code::UNAUTHORIZED);
-                        // Could set payload "Security context not found"
-                    })
+                    }
                 }
-            } else {
-                // OSCORE request but the context is busy
-                coap_gatt_utils::write(|response| {
-                    response.set_code(coap_numbers::code::SERVICE_UNAVAILABLE);
-                    response.add_option_uint(coap_numbers::option::MAX_AGE, 0u8);
-                })
-            }
-        } else {
-            // Unprotected requests never have credentials
-            let mut handler = self.chf.build(None, &mut self.rs);
+                Err(e) => {
+                    let rendered = e.render(response);
 
-            let extracted = handler.extract_request_data(&request);
+                    if let Err(_) = rendered {
+                        response.reset();
+                        response.set_code(coap_numbers::code::INTERNAL_SERVER_ERROR);
+                    }
+                }
+            };
 
-            coap_gatt_utils::write(|response| handler.build_response(response, extracted))
-        };
-        heapless::Vec::from_slice(&vec07)
-            .expect("Conversion between heapless versions should not fail")
+            use coap_message_utils::ShowMessageExt;
+            defmt::info!("Responding with {}", response.show());
+        })
     }
 }

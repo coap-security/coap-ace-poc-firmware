@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: Copyright 2022 EDF (Électricité de France S.A.)
+SPDX-FileCopyrightText: Copyright 2022-2024 EDF (Électricité de France S.A.)
 SPDX-License-Identifier: BSD-3-Clause
 -->
 CoAP/ACE-OAuth PoC: Firmware
@@ -24,15 +24,20 @@ and allows some users to alter the identification LEDs.
 The technology stack it demonstrates by this is
 
 * an [ACE-OAuth (RFC9200)] Resource Server (RS) -- this limits the interactions of users according to an authorization server's decisions
-* the [ACE OSCORE profile (RFC9203)] -- this connects the ACE framework with OSCORE, and generates OSCORE keys
 * [OSCORE (RFC8613)] -- this secures communication with symmetric keys, independent of the precise transport mechanism used
+* [EDHOC (RFC9528)] -- this establishes fresh symmetric key material from asymmetric keys with forward secrecy
+* at runtime, any of
+  * the [ACE OSCORE profile (RFC9203)] -- this connects the ACE framework with OSCORE, and generates OSCORE keys
+  * the [ACE EDHOC profile] -- this connects the ACE framework with EDHOC
 * [CoAP (RFC7252)] -- this gives a compact and versatile application protocol with flexible forwarding options
 * [CoAP-over-GATT (`draft-amsuess-core-coap-over-gatt-02`)] -- this allows transporting CoAP over Bluetooth Low Energy (BLE) without the need to set up a Bluetooth IP network
 
 [ACE (RFC9200)]: https://www.rfc-editor.org/rfc/rfc9200.html
 [ACE OSCORE profile (RFC9203)]: https://www.rfc-editor.org/rfc/rfc9203.html
+[ACE EDHOC profile]: https://datatracker.ietf.org/doc/draft-ietf-ace-edhoc-oscore-profile/
 [OSCORE (RFC8613)]: https://www.rfc-editor.org/rfc/rfc8613.html
 [CoAP (RFC7252)]: https://www.rfc-editor.org/rfc/rfc7252.html
+[EDHOC (RFC9528)]: https://datatracker.ietf.org/doc/html/rfc9528
 [CoAP-over-GATT (`draft-amsuess-core-coap-over-gatt-02`)]: https://www.ietf.org/archive/id/draft-amsuess-core-coap-over-gatt-02.html
 
 Quick start: Running the proof-of-concept demo
@@ -47,17 +52,16 @@ Quick start: Running the proof-of-concept demo
   show two LEDs indicating the application's readiness,
   and USB drive will reappear without the file.
 * Direct a Bluetooth capable's cellphone web browser (Chrome or Chromium) to [the corresponding web app].
-  Follow the login instructions, picking either the role of the "junior" or the "senior".
-  Note that in the course of the login, the BLE connection is severed and needs to be reestablished.
-
-  You may also install the mobile application through the browser's "Install app" button.
-
+  Press "Search nearby devices" and pick the device that is shown.
+* As the device requires authentication,
+  follow the "Login" link, and use the name *technician* (password: *technician*) or *junior* (password: *junior*).
 * Use the web application's controls to read the device's temperature,
   to find the device (making its LEDs spin briefly),
-  or to alter its identification LEDs ("senior" only).
+  or to alter its identification LEDs (not available to *junior*).
 
   For illustration purposes, the web application is not made aware of the permission levels,
   and unauthorized control attempts will fail.
+* You may also install the mobile application through the browser's "Install app" button.
 
 [from the build site]: https://oscore.gitlab.io/coap-ace-poc-firmware/
 [the corresponding web app]: https://oscore.gitlab.io/coap-ace-poc-webapp/
@@ -76,12 +80,15 @@ The workings -- getting to know the components
   The web application is built into a static web site,
   which can be served by any modern web server.
 
-* Backing the authentication is an ACE Authorization Server (AS).
-  Its setup and operatioins are described on TBD.
+* Backing the authentication is a keycloak server running the [ACE OAuth Extension].
+  A public instance is available on `https://keycloak.coap.amsuess.com/`;
+  its setup resembles the "playground" configuration that is [provided for development situations].
 
 
 [firmware's documentation]: https://oscore.gitlab.io/coap-ace-poc-firmware/doc/coap_ace_poc_firmware/
 [documented there as well]: https://oscore.gitlab.io/coap-ace-poc-webapp/doc/coap_ace_poc_webapp/
+[ACE OAuth Extension]: https://gitlab.com/oscore/keycloak-ace-oauth-extension/
+[provided for development situations]: https://gitlab.com/oscore/keycloak-ace-oauth-extension/-/tree/main/playground
 
 License
 -------
@@ -89,7 +96,7 @@ License
 This project and all files contained in it is published under the
 BSD-3-Clause license as defined in [`LICENSES/BSD-3-Clause.txt`](LICENSES/BSD-3-Clause.txt).
 
-Copyright: 2022 EDF (Électricité de France S.A.)
+Copyright: 2022-2024 EDF (Électricité de France S.A.)
 
 Author: Christian Amsüss
 

@@ -1,10 +1,10 @@
-# SPDX-FileCopyrightText: Copyright 2022 EDF (Électricité de France S.A.)
+# SPDX-FileCopyrightText: Copyright 2022-2024 EDF (Électricité de France S.A.)
 # SPDX-License-Identifier: BSD-3-Clause
 # See README for all details on copyright, authorship and license.
 
 [package]
 name = "coap-ace-poc-firmware"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = [ "Christian Amsüss" ]
 license = "BSD-3-Clause"
@@ -22,10 +22,6 @@ hardware-nrf52dk = []
 debug = 2
 
 [dependencies]
-# FIXME: CoAP tools still sit on heapless 0.7, but the softdevice wrapper is on
-# 0.8; grep for heapless07 to see which workarounds need to be removed once
-# that is fixed.
-heapless07 = { package = "heapless", version = "0.7", features = [ "defmt" ] }
 heapless = { version = "0.8", features = [ "defmt-03" ] }
 # Providing general entry
 cortex-m-rt = "0.7.0"
@@ -38,11 +34,11 @@ panic-probe = { version = "0.3", features= ["print-defmt"] }
 # Providing an asynchronous runtime needed for the softdevice
 # For integrated-timers see https://github.com/embassy-rs/embassy/issues/1109
 # (the alternative is generic-queue on embassy-time)
-embassy-executor = { version = "0.4.0", features = [ "defmt", "integrated-timers", "executor-thread", "arch-cortex-m" ]}
+embassy-executor = { version = "0.6.0", features = [ "defmt", "integrated-timers", "executor-thread", "arch-cortex-m" ]}
 # ... and helpers to get the 'static Server we need in the runners
 static_cell = "1"
 
-embassy-time = { version = "0.2.0", features = [ "defmt" ] }
+embassy-time = { version = "0.3.0", features = [ "defmt" ] }
 embassy-sync = "0.5.0"
 
 fixed = "1"
@@ -54,41 +50,49 @@ nrf-softdevice = { version = "0.1.0", features = ["defmt", "nrf52832", "s132", "
 # We could pick 112, that would suffice from the required features, but
 # building on 132 to ensure we can migrate over.
 nrf-softdevice-s132 = "0.1.1"
-embassy-nrf = { version = "0.1.0", features = [ "defmt", "nrf52832", "gpiote", "time-driver-rtc1" ]}
+embassy-nrf = { version = "0.2.0", features = [ "defmt", "nrf52832", "gpiote", "time-driver-rtc1" ]}
 # LEDs and buttons, really
 nrf52832-hal = "0.15.1"
 
-coap-message = "0.2"
-coap-gatt-utils = { git = "https://gitlab.com/oscore/coap-gatt-utils/" }
-coap-handler = "0.1"
+coap-message = "0.3"
+coap-message-implementations = "0.1.6"
+coap-message-utils = "0.3.8"
+coap-gatt-utils = { git = "https://gitlab.com/oscore/coap-gatt-utils/", branch = "v02" }
+coap-handler = "0.2"
 # It'd be nice to use ciborium here, but that's not implemented b/c it's not
 # easily no_alloc. Anyway, switching over should only be a matter from moving
 # the handlers from new_minicbor to new_ciborium if the need arises.
-coap-handler-implementations = { version = "0.3.5", features = [ "minicbor" ] }
+coap-handler-implementations = "0.5"
 coap-numbers = "0.2"
 # The version coap-handler-implementations caters for
-minicbor = "0.15"
+minicbor = "0.24"
 
 # RS
-ace-oscore-helpers = { git = "https://gitlab.com/oscore/ace-oscore-helpers/", features = [ "liboscore" ] }
+ace-oscore-helpers = { git = "https://gitlab.com/oscore/ace-oscore-helpers/", features = [ "liboscore" ], branch = "v02" }
 rand_core = "0.6"
 dcaf = { version = "^0.3", default-features = false }
 coset = { version = "^0.3", default-features = false }
 
-embedded-alloc = "0.5"
+embedded-alloc = "0.6"
 # Needed to introspect ClaimsSet.rest
 ciborium = { version = "0.2", default-features = false }
 
-liboscore = "0.1.0"
-liboscore-msgbackend = { version = "0.1.0", features = [ "alloc" ] }
-# only to enable the feature
-# liboscore-cryptobackend = { version = "0.1.0", features = [ "log_cryptographic_operations_including_secret_keys" ] }
-# just for the above
-log-to-defmt = "0.1.0"
+hex-literal = "0.4.1"
+#coapcore = { git = "https://github.com/ariel-os/ariel-os", features = [ "defmt" ] }
+coapcore = { git = "https://github.com/chrysn-pull-requests/riot-rs", features = [ "defmt" ], rev = "869da50922816377d4ff7fdc2a07c63b47a8e65f" } # in branch "coapcore-time"
+lakers = { version = "0.7.2", features = [ "defmt" ] }
+lakers-crypto-rustcrypto = "0.7.2"
+# Just to enable the features. The unmodified sizes are just a tad too small
+# for signed tokens (at least with full X and Y coorinates in them), but the
+# full quadrupled sizes lead to crashes in the Softdevcie.
+lakers-shared = { version = "0.7.2", features = [ "max_message_size_len_384", "max_kdf_content_len_384", "max_buffer_len_384" ] }
 
 # for rendering the 4.01
 windowed-infinity = { version = "0.1.2", features = [ "with_ciborium" ] }
 ciborium-ll = { version = "0.2", default-features = false }
+# or recently
+cbor-macro = "0.1.0"
+cboritem = "0.1.2"
 
 [build-dependencies]
 serde = "1"
@@ -97,15 +101,23 @@ hex = "0.4"
 
 [patch.crates-io]
 # These are published, but wisdom on matrix is to not mix them
-embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "3b6eaf414a92114037a40dcb3ce37a4191c57a2b" }
-embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "3b6eaf414a92114037a40dcb3ce37a4191c57a2b" }
-embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "3b6eaf414a92114037a40dcb3ce37a4191c57a2b" }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "6d9ed4c0807c977aa6d3c852360d52128f8c459a" }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "6d9ed4c0807c977aa6d3c852360d52128f8c459a" }
+embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "6d9ed4c0807c977aa6d3c852360d52128f8c459a" }
 
 # None of these are available on crates.io yet
-embassy-nrf = { git = "https://github.com/embassy-rs/embassy", rev = "3b6eaf414a92114037a40dcb3ce37a4191c57a2b" }
+embassy-nrf = { git = "https://github.com/embassy-rs/embassy", rev = "6d9ed4c0807c977aa6d3c852360d52128f8c459a" }
 
-nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "fa1d5915be4de37b97b4771ddd22bce07d69be54" }
-nrf-softdevice-s132 = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "fa1d5915be4de37b97b4771ddd22bce07d69be54" }
+nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "bb1600b728c8acbaecf974741ee5867b472289f3" }
+nrf-softdevice-s132 = { git = "https://github.com/embassy-rs/nrf-softdevice", rev = "bb1600b728c8acbaecf974741ee5867b472289f3" }
 
 coset = { git = "https://github.com/chrysn-pull-requests/coset", branch = "oscore" }
 dcaf = { git = "https://github.com/chrysn-pull-requests/dcaf-rs", branch = "oscore" }
+
+lakers = { git = "https://github.com/chrysn-pull-requests/edhoc-rs", rev = "7f8e8944602aaa90d89eab459f4124a5e1a9fdec" }# from branch "size-granularity"
+lakers-shared = { git = "https://github.com/chrysn-pull-requests/edhoc-rs", rev = "7f8e8944602aaa90d89eab459f4124a5e1a9fdec" }
+lakers-crypto-rustcrypto = { git = "https://github.com/chrysn-pull-requests/edhoc-rs", rev = "7f8e8944602aaa90d89eab459f4124a5e1a9fdec" }
+
+# Apply https://github.com/twittner/minicbor/pull/9 for coapcore
+minicbor-derive = { git = "https://github.com/chrysn-pull-requests/minicbor", branch = "negativ-indices" }
+minicbor = { git = "https://github.com/chrysn-pull-requests/minicbor", branch = "negativ-indices" }

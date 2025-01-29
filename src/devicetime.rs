@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: Copyright 2022 EDF (Électricité de France S.A.)
+// SPDX-FileCopyrightText: Copyright 2022-2024 EDF (Électricité de France S.A.)
 // SPDX-License-Identifier: BSD-3-Clause
 // See README for all details on copyright, authorship and license.
 //! A simple module for keepign an absolute UNIX time
@@ -34,5 +34,19 @@ pub fn unixtime() -> Result<u32, ClockNotSet> {
     match offset {
         0 => Err(ClockNotSet),
         o => Ok(embassy_time::Instant::now().as_secs() as u32 + o),
+    }
+}
+
+pub(crate) struct Time;
+
+impl coapcore::time::TimeProvider for Time {
+    fn now(&mut self) -> (u64, Option<u64>) {
+        if let Ok(now) = unixtime() {
+            (now.into(), Some(now.into()))
+        } else {
+            // Rejecting all (under the raytime model it would be more correct to have some
+            // leniencey, but we don't have any memory)
+            (u64::MAX, Some(u64::MAX))
+        }
     }
 }

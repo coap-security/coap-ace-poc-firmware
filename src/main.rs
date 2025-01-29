@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: Copyright 2022 EDF (Électricité de France S.A.)
+// SPDX-FileCopyrightText: Copyright 2022-2024 EDF (Électricité de France S.A.)
 // SPDX-License-Identifier: BSD-3-Clause
 // See README for all details on copyright, authorship and license.
 //! CoAP/ACE PoC: Firmware
@@ -21,13 +21,10 @@
 //!   Note that that software is limited in how it can be distributed; you will find the precise
 //!   license terms along with the file.
 //!
-//! * `probe-run`, `probe-rs` and `nrf-recover` installed: `$ cargo install probe-run probe-rs-cli
-//!   nrf-recover`
+//! * `probe-rs` and `nrf-recover` installed: `$ cargo install probe-rs-cli nrf-recover`
 //!
 //!   Other debuggers will do as well, but to display debug output, some tool that supports `defmt`
-//!   is needed; `probe-run` does that.
-//!
-//!   <!-- TBD: probably one of the two probe- might do -->
+//!   is needed; `probe-rs` does that.
 //!
 //! To build and install the firmware:
 //!
@@ -35,7 +32,7 @@
 //!   already (eg. if the device was just erased).
 //!
 //!   ```shell
-//!   $ probe-rs-cli download --chip nrf52832_xxAA --format hex /tmp/s132_nrf52_7.3.0/s132_nrf52_7.3.0_softdevice.hex
+//!   $ probe-rs download --chip nrf52832_xxAA --binary-format hex /tmp/s132_nrf52_7.3.0/s132_nrf52_7.3.0_softdevice.hex
 //!   ```
 //!
 //!   * If you encounter errors in the style of "Error: AP ApAddress { dp: Default, ap: 0 } is not
@@ -46,7 +43,7 @@
 //! * Restore operation of the reset pin after the `nrf-recover` wipe:
 //!
 //!   ```shell
-//!   $ cat uicr_reset_pin21.hex | grep -v '//' | probe-rs-cli download --chip nrf52832_xxAA --format hex /dev/stdin
+//!   $ cat uicr_reset_pin21.hex | grep -v '//' | probe-rs download --chip nrf52832_xxAA --binary-format hex /dev/stdin
 //!   ```
 //!
 //!   (where the grep is a workaround for probe-rs not accepting comments in ihex files<!-- https://github.com/martinmroz/ihex/issues/16#issuecomment-1374406055 -->).
@@ -57,10 +54,14 @@
 //!   $ cargo +nightly run --release
 //!   ```
 //!
-//!   which downloads all relevant crates, builds them and flashes them, all using `probe-run`.
+//!   which downloads all relevant crates, builds them and flashes them, all using `probe-rs`.
 //!
 //!   After a long horizontal line, the program will print any debug output the firmware produces.
 //!   To increase verbosity, prefix the command with `DEFMT_LOG=info`.
+//!
+//!   If you run into any trouble that look like they stem from C code, there may be inconsistent
+//!   versions of clang in use; setting `LLVM_CONFIG_PATH=/usr/bin/llvm-config-18
+//!   LIBCLANG_PATH=/usr/lib/llvm-18/lib/` or similar helps in those situations.
 //!
 //! Once the firmware is flashed, it will start whenever the device is powered.
 //!
@@ -95,8 +96,6 @@ use embassy_executor::{Executor, Spawner};
 use nrf_softdevice::ble::{gatt_server, peripheral};
 use nrf_softdevice::{raw, Softdevice};
 
-use ace_oscore_helpers::resourceserver::ResourceServer;
-
 static EXECUTOR: static_cell::StaticCell<Executor> = static_cell::StaticCell::new();
 
 /// Maximum number of concurrent BLE connections to manage
@@ -123,6 +122,7 @@ async fn softdevice_task(sd: &'static Softdevice) {
     sd.run().await;
 }
 
+#[derive(Copy, Clone)]
 struct SdRandomness(&'static Softdevice);
 
 // The embassy-nrf::rng::Rng would be an alternative here, but its new() function is so scarily
@@ -148,6 +148,22 @@ impl rand_core::RngCore for SdRandomness {
     }
 }
 
+// nrf_softdevice::random_bytes is advertised as cryptographically secure
+impl rand_core::CryptoRng for SdRandomness {}
+
+pub(crate) struct CoapcoreConfig {
+    pub audience: &'static str,
+    pub request_creation_hints: &'static [u8],
+
+    pub as_symmetric: Option<[u8; 32]>,
+
+    pub edhoc_x: Option<[u8; 32]>,
+    pub edhoc_y: Option<[u8; 32]>,
+    pub edhoc_q: Option<&'static [u8; 32]>,
+
+    pub as_pub: Option<([u8; 32], [u8; 32])>,
+}
+
 // None of our current users take these as actual UUIDs...
 // let coap_gatt_us: Uuid = "8df804b7-3300-496d-9dfa-f8fb40a236bc".parse().unwrap();
 // let coap_gatt_uc: Uuid = "2a58fc3f-3c62-4ecc-8167-d66d4d9410c2".parse().unwrap();
@@ -167,30 +183,61 @@ struct Server {
     coap: CoAPGattService,
 }
 
-type RsMutex = embassy_sync::mutex::Mutex<
-    embassy_sync::blocking_mutex::raw::NoopRawMutex,
-    ResourceServer<rs_configuration::ApplicationClaims, SdRandomness>,
->;
-type Rs = embassy_sync::mutex::Mutex<
-    embassy_sync::blocking_mutex::raw::NoopRawMutex,
-    ResourceServer<crate::rs_configuration::ApplicationClaims, SdRandomness>,
->;
-// runs into an ICE which I couldn't minify yet
-// type CoapHandlerFactory = impl Fn(Option<crate::rs_configuration::ApplicationClaims>, &'static Rs) -> coap::CoapHandler + 'static;
-pub struct CoapHandlerFactory {
-    leds: &'static blink::Leds,
-    sd: &'static Softdevice,
-}
+mod main_rs_definition {
+    use super::*;
 
-impl CoapHandlerFactory {
-    pub fn build(
-        &self,
-        claims: Option<&crate::rs_configuration::ApplicationClaims>,
-        rs: &'static Rs,
-    ) -> coap::CoapHandler {
-        coap::create_coap_handler(claims, self.sd, self.leds, rs)
+    pub type MainRs = impl coap_handler::Handler;
+
+    pub fn build_main_rs(
+        coapcore_config: CoapcoreConfig,
+        sd: &'static Softdevice,
+        leds: &'static blink::Leds,
+    ) -> MainRs {
+        use cbor_macro::cbor;
+        // FIXME This block is constructing a KCCS out of a raw public key.
+        //
+        // move … somewhere (duplicated w/ webapp)
+        // FIXME: Turned from KCCS to CCS, which is the credential (KCCS is the ID_CRED)
+        let mut credential = hex_literal::hex!("A2 02 60 08 A1 01 A5 01 02 02 41 63 20 01 21 5820 7878787878787878787878787878787878787878787878787878787878787878 22 5820 7979797979797979797979797979797979797979797979797979797979797979");
+        credential[17..17 + 32].copy_from_slice(coapcore_config.edhoc_x.unwrap().as_slice());
+        credential[52..52 + 32].copy_from_slice(coapcore_config.edhoc_y.unwrap().as_slice());
+        let edhoc_q = coapcore_config.edhoc_q.unwrap();
+        defmt::info!("Built own credential as {:02x}", credential);
+
+        let credential = lakers::Credential::parse_ccs(&credential).unwrap();
+
+        let mut our_seccfg = coapcore::seccfg::ConfigBuilder::new()
+            .allow_unauthenticated(
+                coapcore::scope::AifValue::parse(&cbor!([["/time", 7/GET+POST+PUT/]]))
+                    .unwrap()
+                    .into(),
+            )
+            .with_request_creation_hints(coapcore_config.request_creation_hints)
+            .with_own_edhoc_credential(credential, *edhoc_q);
+        if let Some((x, y)) = coapcore_config.as_pub {
+            our_seccfg = our_seccfg.with_aif_asymmetric_es256(
+                x,
+                y,
+                coapcore_config.audience.try_into().unwrap(),
+            );
+        }
+        if let Some(key) = coapcore_config.as_symmetric {
+            our_seccfg = our_seccfg.with_aif_symmetric_as_aesccm256(key);
+        }
+
+        coapcore::OscoreEdhocHandler::new(
+            coap::create_coap_handler(&sd, &leds),
+            our_seccfg,
+            move || lakers_crypto_rustcrypto::Crypto::new(SdRandomness(sd)),
+            SdRandomness(sd),
+            devicetime::Time,
+        )
     }
 }
+
+use main_rs_definition::{build_main_rs, MainRs};
+
+type Rs = embassy_sync::mutex::Mutex<embassy_sync::blocking_mutex::raw::NoopRawMutex, MainRs>;
 
 /// Single Bluetooth connection handler
 ///
@@ -201,10 +248,9 @@ impl CoapHandlerFactory {
 async fn blueworker(
     server: &'static Server,
     conn: nrf_softdevice::ble::Connection,
-    chf: &'static CoapHandlerFactory,
     rs: &'static Rs,
 ) {
-    let mut cg = coap_gatt::Connection::new(chf, rs);
+    let mut cg = coap_gatt::Connection::new(rs);
 
     info!("Running new BLE connection");
     gatt_server::run(&conn, server, |e| match e {
@@ -243,7 +289,6 @@ async fn bluetooth_task(
     server: &'static Server,
     scan_data: &'static [u8],
     spawner: Spawner,
-    chf: &'static CoapHandlerFactory,
     rs: &'static Rs,
 ) {
     #[rustfmt::skip]
@@ -300,7 +345,7 @@ async fn bluetooth_task(
             }
         };
 
-        if let Err(_) = spawner.spawn(blueworker(server, conn, chf, rs)) {
+        if let Err(_) = spawner.spawn(blueworker(server, conn, rs)) {
             // Counting should make sure this never happens, but it's a bit racy.
             warn!("Spawn failure, dropping conn right away");
             USED_CONNECTIONS.fetch_sub(1, core::sync::atomic::Ordering::SeqCst);
@@ -374,14 +419,11 @@ fn outer_main() -> ! {
 fn main() -> ! {
     info!("Device is starting up...");
 
-    log_to_defmt::setup();
-
-    use ace_oscore_helpers::aead;
-    let rs_as_association = include!(concat!(env!("OUT_DIR"), "/rs_as_association.rs"));
+    let coapcore_config = include!(concat!(env!("OUT_DIR"), "/rs_as_association.rs"));
 
     let mut full_name = heapless::String::<20>::new();
     full_name.push_str("CoAP-ACE demo #").unwrap();
-    full_name.push_str(&rs_as_association.audience).unwrap();
+    full_name.push_str(coapcore_config.audience).unwrap();
     let full_name = full_name.into_bytes();
     let full_name_len: u16 = full_name.len().try_into().unwrap();
 
@@ -390,16 +432,12 @@ fn main() -> ! {
     let scan_data = SCAN_DATA.init({
         let mut scan_data = heapless::Vec::<u8, 28>::new();
         scan_data
-            .push(
-                (1 + 5 + rs_as_association.audience.len())
-                    .try_into()
-                    .unwrap(),
-            )
+            .push((1 + 5 + coapcore_config.audience.len()).try_into().unwrap())
             .unwrap();
         scan_data.push(0x08).unwrap();
         scan_data.extend_from_slice(b"CoAP ").unwrap();
         scan_data
-            .extend_from_slice(rs_as_association.audience.as_bytes())
+            .extend_from_slice(coapcore_config.audience.as_bytes())
             .unwrap();
         scan_data
             .extend_from_slice(&[
@@ -417,7 +455,7 @@ fn main() -> ! {
         conn_gatt: Some(raw::ble_gatt_conn_cfg_t {
             // The minimum is not acceptable in amsuess-core-coap-over-gatt-02
             // (and the tokens we post are already in the order of 100 bytes long).
-            att_mtu: 256,
+            att_mtu: 420,
         }),
         gap_device_name: Some(raw::ble_gap_cfg_device_name_t {
             // It needs a mut ptr, but we don't allow writing in the permissions
@@ -458,29 +496,18 @@ fn main() -> ! {
     let sd: &'static Softdevice = sd;
 
     static LEDS: static_cell::StaticCell<blink::Leds> = static_cell::StaticCell::new();
-    static RS: static_cell::StaticCell<RsMutex> = static_cell::StaticCell::new();
-    static COAP_HANDLER_FACTORY: static_cell::StaticCell<CoapHandlerFactory> =
-        static_cell::StaticCell::new();
-
-    let rs = RS.init(embassy_sync::mutex::Mutex::new(
-        ResourceServer::new_with_association_and_randomness(rs_as_association, SdRandomness(sd)),
-    ));
+    static RS: static_cell::StaticCell<Rs> = static_cell::StaticCell::new();
 
     executor.run(move |spawner| {
         let leds: &'static blink::Leds = LEDS.init(blink::Leds::new(spawner, leds));
         leds.set_idle(2);
 
-        let coap_handler_factory = COAP_HANDLER_FACTORY.init(CoapHandlerFactory { sd, leds });
+        let handler = build_main_rs(coapcore_config, sd, leds);
+
+        let rs = RS.init(embassy_sync::mutex::Mutex::new(handler));
 
         unwrap!(spawner.spawn(softdevice_task(sd)));
-        unwrap!(spawner.spawn(bluetooth_task(
-            sd,
-            server,
-            scan_data,
-            spawner,
-            coap_handler_factory,
-            rs
-        )));
+        unwrap!(spawner.spawn(bluetooth_task(sd, server, scan_data, spawner, rs,)));
         info!(
             "Device is ready at {}.",
             nrf_softdevice::ble::get_address(sd)
@@ -489,83 +516,7 @@ fn main() -> ! {
         // Initializing this only late to ensure that nothing of the "regular" things depends on
         // having a heap; this is only for dcaf / coset as they work with ciborium
         unsafe { alloc::init() };
-
-        // Of course they go *after* alloc init: they're based on heap CoAP messages :-)
-        unwrap!(do_oscore_test());
-        info!("OSCORE tests passed");
     });
-}
-
-/// Run a piece of the libOSCORE plug test suite.
-pub fn do_oscore_test() -> Result<(), &'static str> {
-    use core::mem::MaybeUninit;
-
-    use coap_message::{MessageOption, MinimalWritableMessage, ReadableMessage};
-
-    use liboscore::raw;
-
-    // From OSCORE plug test, security context A
-    let immutables = liboscore::PrimitiveImmutables::derive(
-        liboscore::HkdfAlg::from_number(5).unwrap(),
-        b"\x9e\x7c\xa9\x22\x23\x78\x63\x40",
-        b"\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10",
-        None,
-        liboscore::AeadAlg::from_number(24).unwrap(),
-        b"\x01",
-        b"",
-    )
-    .unwrap();
-
-    let mut primitive = liboscore::PrimitiveContext::new_from_fresh_material(immutables);
-
-    let mut msg = coap_message::heapmessage::HeapMessage::new();
-    let oscopt = b"\x09\x00";
-    msg.add_option(9, oscopt);
-    msg.set_payload(b"\x5c\x94\xc1\x29\x80\xfd\x93\x68\x4f\x37\x1e\xb2\xf5\x25\xa2\x69\x3b\x47\x4d\x5e\x37\x16\x45\x67\x63\x74\xe6\x8d\x4c\x20\x4a\xdb");
-
-    liboscore_msgbackend::with_heapmessage_as_msg_native(msg, |msg| {
-        unsafe {
-            let header = liboscore::OscoreOption::parse(oscopt).unwrap();
-
-            let mut unprotected = MaybeUninit::uninit();
-            let mut request_id = MaybeUninit::uninit();
-            let ret = raw::oscore_unprotect_request(
-                msg,
-                unprotected.as_mut_ptr(),
-                &mut header.into_inner(),
-                primitive.as_mut(),
-                request_id.as_mut_ptr(),
-            );
-            assert!(ret == raw::oscore_unprotect_request_result_OSCORE_UNPROTECT_REQUEST_OK);
-            let unprotected = unprotected.assume_init();
-
-            let unprotected = liboscore::ProtectedMessage::new(unprotected);
-            assert!(unprotected.code() == 1);
-
-            let mut message_options = unprotected.options().fuse();
-            let mut ref_options = [(11, "oscore"), (11, "hello"), (11, "1")]
-                .into_iter()
-                .fuse();
-            for (msg_o, ref_o) in (&mut message_options).zip(&mut ref_options) {
-                assert!(msg_o.number() == ref_o.0);
-                assert!(msg_o.value() == ref_o.1.as_bytes());
-            }
-            assert!(
-                message_options.next().is_none(),
-                "Message contained extra options"
-            );
-            assert!(
-                ref_options.next().is_none(),
-                "Message didn't contain the reference options"
-            );
-            assert!(unprotected.payload() == b"");
-        };
-    });
-
-    // We've taken a *mut of it, let's make sure it lives to the end
-    drop(primitive);
-
-    Ok(())
 }
 
 #[no_mangle]
