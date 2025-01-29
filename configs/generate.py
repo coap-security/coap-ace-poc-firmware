@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright 2022 EDF (Électricité de France S.A.)
+# SPDX-FileCopyrightText: Copyright 2022-2024 EDF (Électricité de France S.A.)
 # SPDX-License-Identifier: BSD-3-Clause
 # See README for all details on copyright, authorship and license.
 """
@@ -40,7 +40,7 @@ for i in range(20):
     d['as_pub_x'] = "b4108ad8f21d08a877627aaf3787a91afe75a9886e3bffeb152f9fa42c1dfb50"
     d['as_pub_y'] = "6765776379ee0a507e173841669c33fc587bbeac4609b86dfb12af28118baf8a"
     with open("%s.yaml" % d['audience'], "w") as o:
-        o.write('''# SPDX-FileCopyrightText: Copyright 2022 EDF (Électricité de France S.A.)
+        o.write('''# SPDX-FileCopyrightText: Copyright 2022-2024 EDF (Électricité de France S.A.)
 # SPDX-License-Identifier: BSD-3-Clause
 # See README for all details on copyright, authorship and license.
 ''')
