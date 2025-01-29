@@ -33,12 +33,10 @@ fn main() {
     let config_outfile = Path::new(&std::env::var("OUT_DIR").unwrap()).join("rs_as_association.rs");
     let mut config_outfile =
         std::fs::File::create(config_outfile).expect("Config outfile needs to be writable");
-    // Assigning them static / no_mangle / through a black_box merely serves to make them easier to
-    // spot and maybe change them in firmware images.
     write!(
         config_outfile,
         "{{
-            let coapcore_config = AdhocCoapcoreConfig {{
+            let coapcore_config = CoapcoreConfig {{
                 request_creation_hints: &cbor_macro::cbor!({{1 /as/:{:?}, 5 /aud/: {:?}}}),
                 audience: {:?},
                 as_symmetric: {:?},

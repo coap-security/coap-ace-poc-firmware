@@ -151,7 +151,7 @@ impl rand_core::RngCore for SdRandomness {
 // nrf_softdevice::random_bytes is advertised as cryptographically secure
 impl rand_core::CryptoRng for SdRandomness {}
 
-pub(crate) struct AdhocCoapcoreConfig {
+pub(crate) struct CoapcoreConfig {
     pub audience: &'static str,
     pub request_creation_hints: &'static [u8],
 
@@ -189,7 +189,7 @@ mod main_rs_definition {
     pub type MainRs = impl coap_handler::Handler;
 
     pub fn build_main_rs(
-        coapcore_config: AdhocCoapcoreConfig,
+        coapcore_config: CoapcoreConfig,
         sd: &'static Softdevice,
         leds: &'static blink::Leds,
     ) -> MainRs {
